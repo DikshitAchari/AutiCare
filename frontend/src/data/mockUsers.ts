@@ -1,0 +1,112 @@
+import type { ParentUser, TherapistUser, AdminUser, UserBase } from '../types/user';
+
+export const MOCK_PARENTS: ParentUser[] = [
+  {
+    id: 'P001',
+    email: 'parent@test.com',
+    name: 'Sunita Sharma',
+    role: 'PARENT',
+    phone: '+91 98765 43210',
+    status: 'ACTIVE',
+    joinedDate: '2026-01-15',
+    address: '124 Green Park, New Delhi',
+    childrenIds: ['C001', 'C002'],
+    avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'P002',
+    email: 'parent2@test.com',
+    name: 'Vikram Mehta',
+    role: 'PARENT',
+    phone: '+91 98111 22334',
+    status: 'ACTIVE',
+    joinedDate: '2026-02-01',
+    address: '45 Bandra West, Mumbai',
+    childrenIds: ['C003'],
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+  }
+];
+
+export const MOCK_THERAPISTS: TherapistUser[] = [
+  {
+    id: 'T001',
+    email: 'therapist@test.com',
+    name: 'Dr. Priya Sharma',
+    role: 'THERAPIST',
+    phone: '+91 98222 33445',
+    status: 'APPROVED',
+    joinedDate: '2025-11-10',
+    title: 'Senior Pediatric Behavioral Therapist',
+    qualification: 'Ph.D. in Child Psychology, BCBA Certified',
+    experienceYears: 8,
+    specializations: ['Child Behavior', 'Developmental Therapy', 'Speech Integration', 'Sensory Processing'],
+    languages: ['English', 'Hindi', 'Punjabi'],
+    bio: 'Specializing in early autism screening and personalized ABA-integrated behavioral interventions for young children.',
+    rating: 4.9,
+    reviewsCount: 42,
+    hourlyRate: 1500,
+    location: 'Connaught Place, New Delhi (In-Person & Online)',
+    documentsVerified: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1594824813566-88855ce78341?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'T002',
+    email: 'rajesh@test.com',
+    name: 'Dr. Rajesh Kumar',
+    role: 'THERAPIST',
+    phone: '+91 97333 44556',
+    status: 'APPROVED',
+    joinedDate: '2025-12-05',
+    title: 'Occupational & Speech Pathologist',
+    qualification: 'M.Sc. Clinical Psychology, Sensory Integration Specialist',
+    experienceYears: 6,
+    specializations: ['Sensory Integration', 'Social Skills Training', 'Early Intervention'],
+    languages: ['English', 'Hindi', 'Marathi'],
+    bio: 'Dedicated to helping neurodivergent children enhance emotional regulation, social communication, and everyday functional life skills.',
+    rating: 4.7,
+    reviewsCount: 29,
+    hourlyRate: 1300,
+    location: 'Indiranagar, Bengaluru (Online Only)',
+    documentsVerified: true,
+    avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'T003',
+    email: 'ananya@test.com',
+    name: 'Dr. Ananya Verma',
+    role: 'THERAPIST',
+    phone: '+91 96444 55667',
+    status: 'PENDING',
+    joinedDate: '2026-08-01',
+    title: 'Child Development Specialist',
+    qualification: 'M.Ed. Special Education & Autism Spectrum Disorders',
+    experienceYears: 4,
+    specializations: ['Cognitive Behavior', 'Play Therapy', 'Parent Coaching'],
+    languages: ['English', 'Hindi', 'Bengali'],
+    bio: 'Focused on family-centered developmental therapy and structured play-based social learning.',
+    rating: 4.8,
+    reviewsCount: 14,
+    hourlyRate: 1100,
+    location: 'Salt Lake, Kolkata (In-Person & Online)',
+    documentsVerified: false,
+    avatarUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80',
+  }
+];
+
+export const MOCK_ADMIN: AdminUser = {
+  id: 'ADM001',
+  email: 'admin@test.com',
+  name: 'Rajiv Malhotra (Admin)',
+  role: 'ADMIN',
+  phone: '+91 99999 00000',
+  status: 'ACTIVE',
+  joinedDate: '2025-01-01',
+  department: 'Clinical Operations & Quality Assurance',
+  avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+};
+
+export const mockUsers: UserBase[] = [
+  ...MOCK_PARENTS,
+  ...MOCK_THERAPISTS,
+  MOCK_ADMIN
+];

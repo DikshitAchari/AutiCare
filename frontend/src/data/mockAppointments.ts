@@ -1,0 +1,71 @@
+import type { Appointment } from '../types/appointment';
+
+export const INITIAL_APPOINTMENTS: Appointment[] = [
+  {
+    id: 'APT001',
+    therapistId: 'T001',
+    therapistName: 'Dr. Priya Sharma',
+    childId: 'C001',
+    childName: 'Aarav Sharma',
+    parentId: 'P001',
+    parentName: 'Sunita Sharma',
+    date: '2026-08-12',
+    time: '10:00 AM',
+    status: 'BOOKED',
+    bookingSource: 'ONLINE',
+    appointmentType: 'ONLINE',
+    reason: 'Monthly behavioral progress review and social engagement follow-up.',
+    notes: 'Parent requested focus on peer communication.',
+    createdAt: '2026-08-08T10:30:00Z'
+  },
+  {
+    id: 'APT002',
+    therapistId: 'T001',
+    therapistName: 'Dr. Priya Sharma',
+    childId: 'C003',
+    childName: 'Rahul Mehta',
+    parentId: 'P002',
+    parentName: 'Vikram Mehta',
+    date: '2026-08-12',
+    time: '02:00 PM',
+    status: 'BOOKED',
+    bookingSource: 'OFFLINE',
+    appointmentType: 'IN_PERSON',
+    reason: 'In-clinic sensory integration therapy session.',
+    notes: 'Therapist scheduled clinic slot directly.',
+    createdAt: '2026-08-09T14:00:00Z'
+  },
+  {
+    id: 'APT003',
+    therapistId: 'T001',
+    therapistName: 'Dr. Priya Sharma',
+    childId: 'C002',
+    childName: 'Ananya Sharma',
+    parentId: 'P001',
+    parentName: 'Sunita Sharma',
+    date: '2026-08-13',
+    time: '11:00 AM',
+    status: 'PENDING',
+    bookingSource: 'ONLINE',
+    appointmentType: 'ONLINE',
+    reason: 'Initial consultation and preliminary screening discussion.',
+    notes: 'Reviewing recent assessment questionnaire.',
+    createdAt: '2026-08-10T16:20:00Z'
+  },
+  {
+    id: 'APT004',
+    therapistId: 'T002',
+    therapistName: 'Dr. Rajesh Kumar',
+    childId: 'C001',
+    childName: 'Aarav Sharma',
+    parentId: 'P001',
+    parentName: 'Sunita Sharma',
+    date: '2026-08-15',
+    time: '04:00 PM',
+    status: 'BOOKED',
+    bookingSource: 'ONLINE',
+    appointmentType: 'ONLINE',
+    reason: 'Occupational therapy consultation for fine motor skills.',
+    createdAt: '2026-08-07T11:00:00Z'
+  }
+];
