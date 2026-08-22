@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppointments } from '../../context/AppointmentContext';
 import { OfflineBookingModal } from '../../components/appointments/OfflineBookingModal';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import type { Child } from '../../types/child';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';

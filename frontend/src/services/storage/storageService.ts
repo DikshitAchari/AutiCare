@@ -12,6 +12,7 @@ import type { AssessmentResult } from '../../types/assessment';
 
 const STORAGE_KEYS = {
   AUTH_USER: 'autism_system_auth_user',
+  AUTH_TOKEN: 'autism_system_auth_token',
   APPOINTMENTS: 'autism_system_appointments',
   CHILDREN: 'autism_system_children',
   BEHAVIORS: 'autism_system_behaviors',
@@ -47,6 +48,9 @@ export const storageService = {
   getUserSession: (): UserSession | null => storageService.get<UserSession | null>(STORAGE_KEYS.AUTH_USER, null),
   setUserSession: (session: UserSession) => storageService.set(STORAGE_KEYS.AUTH_USER, session),
   clearUserSession: () => localStorage.removeItem(STORAGE_KEYS.AUTH_USER),
+  getAuthToken: (): string | null => localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN),
+  setAuthToken: (token: string) => localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token),
+  clearAuthToken: () => localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
 
   // Appointments
   getAppointments: () => storageService.get(STORAGE_KEYS.APPOINTMENTS, INITIAL_APPOINTMENTS),

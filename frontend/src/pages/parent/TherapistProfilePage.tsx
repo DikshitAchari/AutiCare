@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { therapistApi } from '../../services/mockApi/therapistApi';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import type { TherapistUser } from '../../types/user';
 import type { Child } from '../../types/child';
 import { useAuth } from '../../context/AuthContext';

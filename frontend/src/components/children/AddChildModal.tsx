@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -53,8 +53,6 @@ export const AddChildModal: React.FC<AddChildModalProps> = ({ isOpen, onClose, o
       const calculatedAge = Math.max(1, currentYear - birthYear);
 
       await childApi.addChild({
-        parentId: user.id,
-        parentName: user.name,
         name: data.name,
         dob: data.dob,
         age: calculatedAge,

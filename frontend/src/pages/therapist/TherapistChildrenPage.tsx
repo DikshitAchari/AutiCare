@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import type { Child } from '../../types/child';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';

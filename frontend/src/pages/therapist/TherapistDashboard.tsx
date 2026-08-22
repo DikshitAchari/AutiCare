@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppointments } from '../../context/AppointmentContext';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import type { Child } from '../../types/child';
 import { Button } from '../../components/ui/Button';
 import { AppointmentCard } from '../../components/appointments/AppointmentCard';

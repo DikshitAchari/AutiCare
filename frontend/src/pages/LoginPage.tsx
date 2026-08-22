@@ -4,46 +4,28 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Lock, Mail, Users, HeartHandshake, UserCheck, ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { showToast } = useToast();
 
-  const [role, setRole] = useState<'PARENT' | 'THERAPIST' | 'ADMIN'>('PARENT');
-  const [email, setEmail] = useState('parent@test.com');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-
-  const getDemoEmail = (selectedRole: 'PARENT' | 'THERAPIST' | 'ADMIN') => {
-    if (selectedRole === 'PARENT') return 'parent@test.com';
-    if (selectedRole === 'THERAPIST') return 'therapist@test.com';
-    return 'admin@test.com';
-  };
-
-  const handleRoleTabChange = (selectedRole: 'PARENT' | 'THERAPIST' | 'ADMIN') => {
-    setRole(selectedRole);
-    setEmail(getDemoEmail(selectedRole));
-    setPassword('123456');
-  };
-
-  const handleAutofillDemo = () => {
-    setEmail(getDemoEmail(role));
-    setPassword('123456');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const session = await login({ email, password, role });
+      const session = await login({ email, password });
       showToast(`Welcome back, ${session.name}!`, 'success');
-      navigate(`/${role.toLowerCase()}/dashboard`);
-    } catch (err: any) {
-      showToast(err?.message || 'Authentication failed', 'error');
+      navigate(`/${session.role.toLowerCase()}/dashboard`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Authentication failed', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -85,44 +67,7 @@ export const LoginPage: React.FC = () => {
             Auti<span className="text-purple-600">Care</span>
           </h1>
           <h2 className="text-lg font-bold text-slate-800">Welcome Back</h2>
-          <p className="text-xs text-slate-500 font-medium">Select your role to access your healthcare portal</p>
-        </div>
-
-        {/* Role Selector Tabs */}
-        <div className="grid grid-cols-3 gap-1.5 bg-slate-200/70 p-1.5 rounded-2xl border border-slate-200/80 backdrop-blur-xs">
-          <button
-            type="button"
-            onClick={() => handleRoleTabChange('PARENT')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              role === 'PARENT'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" /> Parent
-          </button>
-          <button
-            type="button"
-            onClick={() => handleRoleTabChange('THERAPIST')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              role === 'THERAPIST'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <HeartHandshake className="w-3.5 h-3.5" /> Therapist
-          </button>
-          <button
-            type="button"
-            onClick={() => handleRoleTabChange('ADMIN')}
-            className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              role === 'ADMIN'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" /> Admin
-          </button>
+          <p className="text-xs text-slate-500 font-medium">Sign in to access your healthcare portal</p>
         </div>
 
         {/* Clean Light White Form Card */}
@@ -180,26 +125,11 @@ export const LoginPage: React.FC = () => {
               </label>
               <button
                 type="button"
-                onClick={() => showToast('Demo Mode: Click "Autofill" to set credentials', 'info')}
+                onClick={() => showToast('Please contact support to reset your password.', 'info')}
                 className="font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
               >
                 Forgot Password?
               </button>
-            </div>
-
-            {/* Quick Credentials Box */}
-            <div
-              onClick={handleAutofillDemo}
-              className="bg-purple-50/70 p-3.5 rounded-2xl border border-purple-100 text-xs text-purple-900 space-y-1 cursor-pointer hover:bg-purple-100/70 transition-all group"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <p className="font-extrabold uppercase text-[11px] flex items-center gap-1 text-purple-800">
-                  <ShieldAlert className="w-3.5 h-3.5 text-purple-600" /> Demo Quick Credentials:
-                </p>
-                <span className="text-[11px] font-black text-purple-700 group-hover:underline">Autofill</span>
-              </div>
-              <p className="text-[11px]">Email: <span className="font-mono font-bold text-purple-900">{getDemoEmail(role)}</span></p>
-              <p className="text-[11px]">Password: <span className="font-mono font-bold text-purple-900">123456</span></p>
             </div>
 
             <Button
@@ -207,14 +137,14 @@ export const LoginPage: React.FC = () => {
               className="w-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg shadow-purple-600/25 transition-all cursor-pointer text-sm"
               isLoading={isLoading}
             >
-              Sign In to {role.charAt(0) + role.slice(1).toLowerCase()} Portal
+              Sign In
             </Button>
           </form>
 
           <div className="text-center pt-2 border-t border-slate-100 text-xs text-slate-500 font-medium">
             Don't have an account?{' '}
             <button
-              onClick={() => showToast('Select a role above to explore the demo platform', 'info')}
+              onClick={() => navigate('/register')}
               className="font-extrabold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
             >
               Create Account

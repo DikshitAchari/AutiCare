@@ -1,23 +1,23 @@
-import React, { createContext, useContext, useState } from 'react';
-import type { AuthState, UserSession, LoginCredentials } from '../types/auth';
-import { authApi } from '../services/mockApi/authApi';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import type { AuthState, UserSession, LoginCredentials, RegisterCredentials } from '../types/auth';
+import { authApi } from '../services/api/authApi';
 import { storageService } from '../services/storage/storageService';
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<UserSession>;
+  register: (credentials: RegisterCredentials) => Promise<UserSession>;
   logout: () => void;
-  quickSwitchRole: (role: 'PARENT' | 'THERAPIST' | 'ADMIN') => Promise<UserSession>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AuthState>(() => {
-    const savedUser = storageService.get<UserSession | null>(storageService.KEYS.AUTH_USER, null);
+    const savedUser = storageService.getAuthToken() ? storageService.getUserSession() : null;
     return {
       user: savedUser,
       isAuthenticated: !!savedUser,
-      isLoading: false,
+      isLoading: !!storageService.getAuthToken(),
       error: null
     };
   });
@@ -25,8 +25,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (credentials: LoginCredentials): Promise<UserSession> => {
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
     try {
-      const session = await authApi.login(credentials);
-      storageService.set(storageService.KEYS.AUTH_USER, session);
+      const response = await authApi.login(credentials);
+      const session = await authApi.getCurrentUser(response.token);
+      storageService.setAuthToken(response.token);
+      storageService.setUserSession(session);
       setState({
         user: session,
         isAuthenticated: true,
@@ -34,15 +36,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: null
       });
       return session;
-    } catch (err: any) {
-      const errMsg = err?.message || 'Login failed';
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Login failed';
       setState((prev) => ({ ...prev, isLoading: false, error: errMsg }));
       throw err;
     }
   };
 
+  const register = async (credentials: RegisterCredentials): Promise<UserSession> => authApi.register(credentials);
+
+  useEffect(() => {
+    const token = storageService.getAuthToken();
+    if (!token) return;
+
+    authApi.getCurrentUser(token).then((user) => {
+      storageService.setUserSession(user);
+      setState({ user, isAuthenticated: true, isLoading: false, error: null });
+    }).catch(() => {
+      storageService.clearAuthToken();
+      storageService.clearUserSession();
+      setState({ user: null, isAuthenticated: false, isLoading: false, error: null });
+    });
+  }, []);
+
   const logout = () => {
-    storageService.set(storageService.KEYS.AUTH_USER, null);
+    storageService.clearAuthToken();
+    storageService.clearUserSession();
     setState({
       user: null,
       isAuthenticated: false,
@@ -51,17 +70,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const quickSwitchRole = async (role: 'PARENT' | 'THERAPIST' | 'ADMIN'): Promise<UserSession> => {
-    const emails = {
-      PARENT: 'parent@test.com',
-      THERAPIST: 'therapist@test.com',
-      ADMIN: 'admin@test.com'
-    };
-    return login({ email: emails[role], password: '123456', role });
-  };
-
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, quickSwitchRole }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

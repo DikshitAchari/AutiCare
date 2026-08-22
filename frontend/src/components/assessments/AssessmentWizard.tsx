@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ASSESSMENT_QUESTIONS } from '../../data/mockAssessments';
-import { assessmentApi } from '../../services/mockApi/assessmentApi';
+import { assessmentApi } from '../../services/api/assessmentApi';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../ui/Button';
 import type { Child } from '../../types/child';

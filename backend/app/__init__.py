@@ -1,0 +1,1 @@
+"""AutiCare FastAPI application package."""

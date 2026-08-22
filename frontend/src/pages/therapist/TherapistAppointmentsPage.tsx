@@ -4,7 +4,7 @@ import { useAppointments } from '../../context/AppointmentContext';
 import { AppointmentTable } from '../../components/appointments/AppointmentTable';
 import { AppointmentCard } from '../../components/appointments/AppointmentCard';
 import { OfflineBookingModal } from '../../components/appointments/OfflineBookingModal';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import type { Child } from '../../types/child';
 import { Button } from '../../components/ui/Button';
 import { Tabs } from '../../components/ui/Tabs';

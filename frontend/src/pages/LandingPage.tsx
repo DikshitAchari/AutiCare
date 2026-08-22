@@ -58,7 +58,7 @@ export const LandingPage: React.FC = () => {
                   Login
                 </button>
                 <button
-                  onClick={() => navigate('/login')}
+                  onClick={() => navigate('/register')}
                   className="px-5 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md shadow-purple-600/25 transition-all cursor-pointer"
                 >
                   Register

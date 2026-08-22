@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import type { Child } from '../../types/child';
 import { AddChildModal } from '../../components/children/AddChildModal';
 import { VideoUploadModal } from '../../components/video/VideoUploadModal';

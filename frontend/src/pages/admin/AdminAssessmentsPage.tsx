@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { assessmentApi } from '../../services/mockApi/assessmentApi';
+import { assessmentApi } from '../../services/api/assessmentApi';
 import type { AssessmentResult } from '../../types/assessment';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';

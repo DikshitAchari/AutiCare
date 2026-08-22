@@ -12,12 +12,11 @@ export interface ScreeningResultVisualizerProps {
 export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps> = ({ result }) => {
   const navigate = useNavigate();
 
-  const domainScores = [
-    { name: 'Social Communication', score: 65, color: 'bg-purple-600' },
-    { name: 'Repetitive Behavior', score: 45, color: 'bg-amber-500' },
-    { name: 'Emotional Regulation', score: 55, color: 'bg-indigo-600' },
-    { name: 'Motor Skills', score: 70, color: 'bg-emerald-500' }
-  ];
+  const domainScores = result.domainScores.map((domain, index) => ({
+    name: domain.categoryName || domain.category,
+    score: domain.percentage ?? domain.scorePercentage ?? 0,
+    color: ['bg-purple-600', 'bg-amber-500', 'bg-indigo-600', 'bg-emerald-500'][index % 4]
+  }));
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -52,15 +51,15 @@ export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps>
       <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center font-black text-xl shrink-0">
-            78%
+            {result.percentage}%
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-black text-slate-900">Moderate Risk</h2>
-              <StatusBadge status={result.supportIndicator || 'MODERATE'} type="support" />
+              <h2 className="text-lg font-black text-slate-900">{result.supportIndicator} Support</h2>
+              <StatusBadge status={result.supportIndicator} type="support" />
             </div>
             <p className="text-xs text-slate-500 font-medium">
-              Overall score points: {result.totalScore || 54} / {result.maxScore || 100} • Confidence level: 78%
+              Overall score points: {result.totalScore} / {result.maxScore}
             </p>
           </div>
         </div>
@@ -99,12 +98,7 @@ export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps>
       <div className="p-6 rounded-3xl bg-white border border-slate-100 shadow-xs space-y-4">
         <h3 className="text-sm font-extrabold text-slate-900">Recommended Next Steps</h3>
         <div className="space-y-3">
-          {[
-            'Schedule a 45-minute clinical consultation with a certified pediatric therapist',
-            'Implement structured daily routines for social interactions & joint attention exercises',
-            'Log weekly behavioral observations and upload 30-sec behavior videos',
-            'Retake screening evaluation in 90 days to track progression velocity'
-          ].map((rec, idx) => (
+          {result.recommendations.map((rec, idx) => (
             <div key={idx} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-3">
               <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
               <span>{rec}</span>
