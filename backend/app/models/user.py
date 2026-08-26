@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.sql import func
 
 from app.database.connection import Base
@@ -59,3 +59,32 @@ class AssessmentAnswer(Base):
     assessment_id = Column(Integer, nullable=False, index=True)
     question_id = Column(String, nullable=False)
     score = Column(Integer, nullable=False)
+
+
+class PredictionAnalysis(Base):
+    __tablename__ = "prediction_analyses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    child_id = Column(Integer, ForeignKey("child_profiles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    source = Column(String, nullable=False, default="questionnaire")
+    support_indicator = Column(String, nullable=False)
+    confidence_score = Column(Integer, nullable=True)
+    percentage = Column(Integer, nullable=True)
+    summary = Column(Text, nullable=False)
+    recommendations = Column(JSON, nullable=False, default=list)
+    disclaimer = Column(Text, nullable=False)
+    model_name = Column(String, nullable=True)
+    model_version = Column(String, nullable=True)
+    raw_output = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

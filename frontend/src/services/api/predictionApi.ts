@@ -33,5 +33,34 @@ export const predictionApi = {
       recommendations: result.recommendations,
       disclaimer: result.disclaimer
     };
+  },
+
+  analyzeVideo: async (childId: string, file: File): Promise<PredictionResult> => {
+    const formData = new FormData();
+    formData.append('child_id', childId);
+    formData.append('file', file);
+
+    const result = await request<{
+      child_id: number;
+      support_indicator: string;
+      confidence_score: number;
+      percentage: number;
+      summary: string;
+      recommendations: string[];
+      disclaimer: string;
+    }>('/api/prediction/analyze', {
+      method: 'POST',
+      body: formData
+    });
+
+    return {
+      childId: String(result.child_id),
+      supportIndicator: result.support_indicator,
+      confidenceScore: result.confidence_score,
+      percentage: result.percentage,
+      summary: result.summary,
+      recommendations: result.recommendations,
+      disclaimer: result.disclaimer
+    };
   }
 };

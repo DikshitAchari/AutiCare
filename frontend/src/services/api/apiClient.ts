@@ -7,12 +7,13 @@ interface ApiErrorBody {
 }
 
 export const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+  const isFormData = options.body instanceof FormData;
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(storageService.getAuthToken() ? { Authorization: `Bearer ${storageService.getAuthToken()}` } : {}),
         ...options.headers
       }

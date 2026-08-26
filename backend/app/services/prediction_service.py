@@ -1,4 +1,21 @@
-from typing import Dict, List
+import json
+import os
+import shlex
+import subprocess
+from typing import Dict, Optional
+
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.models.user import ChildProfile, PredictionAnalysis
+
+
+class ModelConfigurationError(RuntimeError):
+    pass
+
+
+class ModelInferenceError(RuntimeError):
+    pass
 
 
 class PredictionService:
@@ -49,3 +66,97 @@ class PredictionService:
             "recommendations": recommendations,
             "disclaimer": disclaimer,
         }
+
+    @staticmethod
+    def save_result(
+        db: Session,
+        *,
+        child_id: int,
+        user_id: int,
+        source: str,
+        result: dict,
+        model_name: Optional[str] = None,
+        model_version: Optional[str] = None,
+        raw_output: Optional[dict] = None,
+    ) -> PredictionAnalysis:
+        child = db.query(ChildProfile).filter(ChildProfile.id == child_id).first()
+        if not child:
+            raise ValueError("Child profile not found")
+        if child.parent_id != user_id:
+            raise PermissionError("You do not have access to this child profile")
+
+        record = PredictionAnalysis(
+            child_id=child_id,
+            user_id=user_id,
+            source=source,
+            support_indicator=result["support_indicator"],
+            confidence_score=result.get("confidence_score"),
+            percentage=result.get("percentage"),
+            summary=result["summary"],
+            recommendations=result.get("recommendations", []),
+            disclaimer=result["disclaimer"],
+            model_name=model_name,
+            model_version=model_version,
+            raw_output=raw_output,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return record
+
+    @staticmethod
+    def analyze_video(video_path: str) -> dict:
+        settings = get_settings()
+        if not settings.ai_video_model_command:
+            raise ModelConfigurationError(
+                "AI_VIDEO_MODEL_COMMAND is not configured. Configure a real video model command that accepts "
+                "the uploaded video path and returns JSON on stdout."
+            )
+
+        if settings.ai_video_model_path:
+            if not os.path.exists(settings.ai_video_model_path):
+                raise ModelConfigurationError(f"Configured model file does not exist: {settings.ai_video_model_path}")
+            if os.path.getsize(settings.ai_video_model_path) == 0:
+                raise ModelConfigurationError(f"Configured model file is empty: {settings.ai_video_model_path}")
+
+        command = shlex.split(settings.ai_video_model_command, posix=False)
+        if not command:
+            raise ModelConfigurationError("AI_VIDEO_MODEL_COMMAND is empty.")
+
+        env = os.environ.copy()
+        if settings.ai_video_model_path:
+            env["AI_VIDEO_MODEL_PATH"] = settings.ai_video_model_path
+
+        try:
+            completed = subprocess.run(
+                [*command, video_path],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env,
+            )
+        except OSError as exc:
+            raise ModelConfigurationError(f"Unable to execute configured video model command: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ModelInferenceError("Video model inference timed out.") from exc
+
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or "Model command failed without output."
+            raise ModelInferenceError(detail)
+
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise ModelInferenceError("Video model command must return valid JSON on stdout.") from exc
+
+        required = {"support_indicator", "confidence_score", "percentage", "summary", "recommendations"}
+        missing = sorted(required - payload.keys())
+        if missing:
+            raise ModelInferenceError(f"Video model JSON is missing required fields: {', '.join(missing)}")
+
+        payload.setdefault(
+            "disclaimer",
+            "This video analysis is a screening/support result only and does not constitute a medical diagnosis of autism spectrum disorder.",
+        )
+        return payload

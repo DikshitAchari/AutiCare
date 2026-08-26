@@ -81,19 +81,27 @@ Example:
 
 ```env
 SECRET_KEY=your-long-random-secret
-DATABASE_URL=sqlite:///./auticare.db
+DATABASE_URL=postgresql://postgres:your-password@localhost:5432/auticare_db
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+MAX_VIDEO_UPLOAD_MB=100
+AI_VIDEO_MODEL_PATH=
+AI_VIDEO_MODEL_COMMAND=
+OPENAI_API_KEY=
 ```
 
 ## Database Setup
 
-The app uses SQLAlchemy and SQLite by default for local development.
+The app uses SQLAlchemy and PostgreSQL for local development. Create the PostgreSQL database first, then start the API; the current SQLAlchemy models create their tables automatically at startup.
+
+```sql
+CREATE DATABASE auticare_db;
+```
 
 ```bash
 python -c "from app.database.connection import Base, engine; Base.metadata.create_all(bind=engine)"
 ```
 
-This creates the database file `auticare.db` in the backend folder.
+This creates the application tables in the PostgreSQL database configured by `DATABASE_URL`.
 
 ## Start the API
 
@@ -214,8 +222,38 @@ Authorization: Bearer <token>
 }
 ```
 
+### Video analysis
+
+```http
+POST http://localhost:8000/api/prediction/analyze
+Content-Type: multipart/form-data
+Authorization: Bearer <token>
+
+child_id=<child_id>
+file=<video file>
+```
+
+Video analysis requires `AI_VIDEO_MODEL_COMMAND` to point to a real local inference command. The backend passes the temporary uploaded video path as the final command argument and expects JSON on stdout containing `support_indicator`, `confidence_score`, `percentage`, `summary`, and `recommendations`. Set `AI_VIDEO_MODEL_PATH` too if that command needs a model artifact; the file must exist and must not be empty.
+
+### Chatbot
+
+```http
+POST http://localhost:8000/api/chat
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "message": "What should I track before meeting a clinician?"
+}
+```
+
+```http
+GET http://localhost:8000/api/chat/history
+Authorization: Bearer <token>
+```
+
 ## Notes
 
 - The app is designed as a screening support system and should not claim formal medical diagnosis.
-- The prediction service is a placeholder for future ML integration.
+- Questionnaire prediction is a screening-support heuristic. Video analysis is disabled until a real model command/artifact is configured.
 - Keep the frontend and backend projects separate.

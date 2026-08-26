@@ -1,15 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useToast } from '../../context/ToastContext';
 import { UploadCloud, CheckCircle2, FileVideo, ShieldAlert, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { childApi } from '../../services/api/childApi';
+import { predictionApi } from '../../services/api/predictionApi';
+import type { Child } from '../../types/child';
 
 export const VideoUploadPage: React.FC = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  useEffect(() => {
+    childApi.getChildrenByParent('')
+      .then((items) => {
+        setChildren(items);
+        setSelectedChildId(items[0]?.id ?? '');
+      })
+      .catch((error) => showToast(error instanceof Error ? error.message : 'Unable to load child profiles', 'error'));
+  }, [showToast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -25,17 +39,25 @@ export const VideoUploadPage: React.FC = () => {
     }
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!selectedFile) {
       showToast('Please select or drag a video file first', 'warning');
       return;
     }
+    if (!selectedChildId) {
+      showToast('Please add or select a child profile first', 'warning');
+      return;
+    }
     setIsUploading(true);
-    setTimeout(() => {
-      setIsUploading(false);
-      showToast('Behavior video uploaded successfully! Analyzing AI indicators...', 'success');
+    try {
+      await predictionApi.analyzeVideo(selectedChildId, selectedFile);
+      showToast('Behavior video analyzed and saved.', 'success');
       navigate('/parent/results');
-    }, 1500);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Video analysis failed', 'error');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -50,6 +72,25 @@ export const VideoUploadPage: React.FC = () => {
 
       {/* Main Drag & Drop Card (Screen 4 Visual Direction) */}
       <div className="p-8 rounded-3xl bg-white border border-slate-100 shadow-sm space-y-6">
+        <label className="block space-y-2">
+          <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Child profile</span>
+          <select
+            value={selectedChildId}
+            onChange={(event) => setSelectedChildId(event.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+          >
+            {children.length === 0 ? (
+              <option value="">No child profiles found</option>
+            ) : (
+              children.map((child) => (
+                <option key={child.id} value={child.id}>
+                  {child.name}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
         <div
           onDragOver={(e) => {
             e.preventDefault();

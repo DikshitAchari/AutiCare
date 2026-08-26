@@ -116,6 +116,7 @@ class PredictionRequest(BaseModel):
 
 
 class PredictionResponse(BaseModel):
+    id: Optional[int] = None
     child_id: int
     support_indicator: str
     confidence_score: int
@@ -123,3 +124,27 @@ class PredictionResponse(BaseModel):
     summary: str
     recommendations: List[str]
     disclaimer: str
+    source: str = "questionnaire"
+    created_at: Optional[str] = None
+
+
+class PredictionHistoryItem(PredictionResponse):
+    pass
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
+class ChatResponse(BaseModel):
+    response: str
+    disclaimer: str
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    message: str
+    created_at: Optional[str] = None
+
+    model_config = {"from_attributes": True}
