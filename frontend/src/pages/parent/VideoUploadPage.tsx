@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { UploadCloud, CheckCircle2, FileVideo, ShieldAlert, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +8,7 @@ import { predictionApi } from '../../services/api/predictionApi';
 import type { Child } from '../../types/child';
 
 export const VideoUploadPage: React.FC = () => {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -17,13 +19,15 @@ export const VideoUploadPage: React.FC = () => {
   const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
-    childApi.getChildrenByParent('')
-      .then((items) => {
-        setChildren(items);
-        setSelectedChildId(items[0]?.id ?? '');
-      })
-      .catch((error) => showToast(error instanceof Error ? error.message : 'Unable to load child profiles', 'error'));
-  }, [showToast]);
+    if (user?.id) {
+      childApi.getChildrenByParent(user.id)
+        .then((items) => {
+          setChildren(items);
+          setSelectedChildId(items[0]?.id ?? '');
+        })
+        .catch((error) => showToast(error instanceof Error ? error.message : 'Unable to load child profiles', 'error'));
+    }
+  }, [user, showToast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -50,9 +54,9 @@ export const VideoUploadPage: React.FC = () => {
     }
     setIsUploading(true);
     try {
-      await predictionApi.analyzeVideo(selectedChildId, selectedFile);
-      showToast('Behavior video analyzed and saved.', 'success');
-      navigate('/parent/results');
+      const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile);
+      showToast('AI4ASD behavior video analyzed successfully!', 'success');
+      navigate('/parent/results', { state: { result } });
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Video analysis failed', 'error');
     } finally {

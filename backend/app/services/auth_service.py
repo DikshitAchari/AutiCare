@@ -1,7 +1,8 @@
+from datetime import datetime
 from sqlalchemy.orm import Session
 
-from app.core.security import get_password_hash, verify_password, create_access_token
-from app.models.user import User
+from app.core.security import create_access_token, get_password_hash, verify_password
+from app.models.user import ChildProfile, User
 from app.schemas.user import UserCreate, UserOut
 
 
@@ -12,18 +13,56 @@ class AuthService:
         if existing:
             raise ValueError("User with this email already exists")
 
-        user = User(
-            email=user_in.email.lower(),
-            password_hash=get_password_hash(user_in.password),
-            name=user_in.name,
-            role=user_in.role.upper(),
-            phone=user_in.phone,
-            status="ACTIVE",
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        return user
+        role_upper = user_in.role.upper()
+        if role_upper == "PARENT" and not user_in.child:
+            raise ValueError("Child details are required for parent registration")
+
+        try:
+            user = User(
+                email=user_in.email.lower(),
+                password_hash=get_password_hash(user_in.password),
+                name=user_in.name.strip(),
+                role=role_upper,
+                phone=user_in.phone,
+                status="ACTIVE",
+            )
+            db.add(user)
+            db.flush()
+
+            if role_upper == "PARENT" and user_in.child:
+                child_in = user_in.child
+                if not child_in.name or not child_in.name.strip():
+                    raise ValueError("Child name is required")
+
+                current_year = datetime.now().year
+                birth_year = (
+                    int(child_in.dob[:4])
+                    if child_in.dob and len(child_in.dob) >= 4 and child_in.dob[:4].isdigit()
+                    else current_year
+                )
+                calculated_age = max(0, current_year - birth_year)
+
+                child = ChildProfile(
+                    parent_id=user.id,
+                    name=child_in.name.strip(),
+                    dob=child_in.dob,
+                    age=calculated_age,
+                    gender=child_in.gender or "Male",
+                    school=child_in.school,
+                    grade=child_in.grade,
+                    parent_notes=child_in.parent_notes,
+                    support_indicator="NOT_ASSESSED",
+                    therapy_status="NOT_STARTED",
+                    assessment_status="PENDING",
+                )
+                db.add(child)
+
+            db.commit()
+            db.refresh(user)
+            return user
+        except Exception as exc:
+            db.rollback()
+            raise exc
 
     @staticmethod
     def authenticate_user(db: Session, email: str, password: str, role: str | None = None) -> User:

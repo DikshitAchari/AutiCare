@@ -106,11 +106,12 @@ class PredictionService:
 
     @staticmethod
     def analyze_video(video_path: str) -> dict:
+        get_settings.cache_clear()
         settings = get_settings()
         if not settings.ai_video_model_command:
             raise ModelConfigurationError(
-                "AI_VIDEO_MODEL_COMMAND is not configured. Configure a real video model command that accepts "
-                "the uploaded video path and returns JSON on stdout."
+                "Real AI model cannot run because the required model artifact/weights are missing. "
+                "Please configure AI_VIDEO_MODEL_COMMAND or AI_VIDEO_MODEL_PATH in backend/.env pointing to the trained model weights/inference script."
             )
 
         if settings.ai_video_model_path:

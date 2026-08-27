@@ -24,6 +24,14 @@ export interface RegisterCredentials {
   name: string;
   role: Role;
   phone?: string;
+  child?: {
+    name: string;
+    dob: string;
+    gender: 'Male' | 'Female' | 'Other' | string;
+    school?: string;
+    grade?: string;
+    parent_notes?: string;
+  };
 }
 
 export interface AuthState {

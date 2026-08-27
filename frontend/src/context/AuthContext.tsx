@@ -68,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading: false,
       error: null
     });
+    window.location.href = '/';
   };
 
   return (

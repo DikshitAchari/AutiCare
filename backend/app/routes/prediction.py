@@ -81,6 +81,23 @@ def list_prediction_results(
     return [to_prediction_response(record) for record in records]
 
 
+@router.get("/prediction/results/{prediction_id}", response_model=PredictionResponse)
+def get_prediction_result(
+    prediction_id: int,
+    token_payload: dict = Depends(get_current_user_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(token_payload.get("sub"))
+    record = (
+        db.query(PredictionAnalysis)
+        .filter(PredictionAnalysis.id == prediction_id, PredictionAnalysis.user_id == user_id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prediction analysis result not found")
+    return to_prediction_response(record)
+
+
 @router.post("/prediction/analyze", response_model=PredictionResponse, status_code=status.HTTP_201_CREATED)
 async def analyze_video(
     child_id: int = Form(...),

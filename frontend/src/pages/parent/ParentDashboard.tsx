@@ -6,6 +6,8 @@ import type { Child } from '../../types/child';
 import type { TherapistUser } from '../../types/user';
 import { useAppointments } from '../../context/AppointmentContext';
 import { useNavigate } from 'react-router-dom';
+import { AddChildModal } from '../../components/children/AddChildModal';
+import { VideoUploadModal } from '../../components/video/VideoUploadModal';
 
 import {
   Brain,
@@ -16,7 +18,9 @@ import {
   TrendingUp,
   Video,
   Award,
-  CheckCircle2
+  CheckCircle2,
+  Baby,
+  UserPlus
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -27,25 +31,42 @@ import {
   Tooltip,
   CartesianGrid
 } from 'recharts';
-import { VideoUploadModal } from '../../components/video/VideoUploadModal';
 
 export const ParentDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { appointments } = useAppointments();
 
+  const [childrenList, setChildrenList] = useState<Child[]>([]);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [topTherapists, setTopTherapists] = useState<TherapistUser[]>([]);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [isAddChildModalOpen, setIsAddChildModalOpen] = useState(false);
+
+  const fetchChildren = async () => {
+    if (user) {
+      try {
+        const children = await childApi.getChildrenByParent(user.id);
+        setChildrenList(children);
+        if (children.length > 0) {
+          setSelectedChild((prev) => {
+            if (prev && children.some((c) => c.id === prev.id)) {
+              return children.find((c) => c.id === prev.id) || children[0];
+            }
+            return children[0];
+          });
+        } else {
+          setSelectedChild(null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch children:', err);
+      }
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
-      if (user) {
-        const children = await childApi.getChildrenByParent(user.id);
-        if (children.length > 0) {
-          setSelectedChild(children[0]);
-        }
-      }
+      await fetchChildren();
       const therapists = await therapistApi.getTherapists();
       setTopTherapists(therapists.filter((t) => t.status === 'APPROVED').slice(0, 3));
     };
@@ -54,7 +75,7 @@ export const ParentDashboard: React.FC = () => {
 
   const parentAppointments = appointments.filter((a) => a.parentId === user?.id);
 
-  // Mock chart data for child milestone progression over time
+  // Chart data for developmental milestone progression
   const progressChartData = [
     { month: 'Jan', social: 45, communication: 50, motor: 60 },
     { month: 'Feb', social: 52, communication: 55, motor: 64 },
@@ -65,7 +86,7 @@ export const ParentDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Header with Role Accent & Add Child Action */}
+      {/* 1. Header with Role Accent, Child Selector & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Parent Dashboard</h1>
@@ -73,14 +94,43 @@ export const ParentDashboard: React.FC = () => {
             Track child screening outcomes, behavioral milestones, and appointments.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {childrenList.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+              <Baby className="w-4 h-4 text-purple-600" />
+              <select
+                value={selectedChild?.id || ''}
+                onChange={(e) => {
+                  const found = childrenList.find((c) => c.id === e.target.value);
+                  if (found) setSelectedChild(found);
+                }}
+                className="text-xs font-bold bg-transparent text-slate-800 focus:outline-none cursor-pointer"
+              >
+                {childrenList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.age} yrs)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            onClick={() => setIsAddChildModalOpen(true)}
+            className="px-3.5 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-slate-200 shadow-xs"
+          >
+            <UserPlus className="w-4 h-4 text-purple-600" />
+            <span>Add Child</span>
+          </button>
+
           <button
             onClick={() => setIsVideoModalOpen(true)}
             className="px-4 py-2.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-purple-200"
           >
             <Video className="w-4 h-4 text-purple-600" />
-            <span>Upload Behavior Video</span>
+            <span>Upload Video</span>
           </button>
+
           <button
             onClick={() => navigate('/parent/assessment/new')}
             className="px-5 py-2.5 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md shadow-purple-600/20 transition-all cursor-pointer flex items-center gap-1.5"
@@ -91,17 +141,57 @@ export const ParentDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Stat Cards Row (Matching Reference Screen 2 & 3) */}
+      {/* Empty State Banner when no child exists */}
+      {childrenList.length === 0 && (
+        <div className="p-6 rounded-3xl bg-gradient-to-r from-purple-50 via-indigo-50 to-white border border-purple-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0 shadow-xs">
+              <Baby className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900">No child profile found</h3>
+              <p className="text-xs text-slate-600 font-medium mt-0.5">
+                Add your child's details to access AI behavioral screenings, personalized clinical recommendations, and therapist appointments.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsAddChildModalOpen(true)}
+            className="px-5 py-2.5 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md shadow-purple-600/25 transition-all cursor-pointer flex items-center gap-2 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Child Profile</span>
+          </button>
+        </div>
+      )}
+
+      {/* 2. Stat Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Card 1: Selected Child Info */}
         <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Selected Child</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Child Profile</span>
             <Brain className="w-4 h-4 text-purple-600" />
           </div>
           <div>
-            <h3 className="text-lg font-black text-slate-900">{selectedChild?.name || 'Aarav Sharma'}</h3>
-            <span className="text-xs text-slate-500 font-semibold">Age {selectedChild?.age || 4} yrs • Male</span>
+            {selectedChild ? (
+              <>
+                <h3 className="text-lg font-black text-slate-900 truncate">{selectedChild.name}</h3>
+                <span className="text-xs text-slate-500 font-semibold">
+                  Age {selectedChild.age} yrs • {selectedChild.gender}
+                </span>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-bold text-slate-500">No child added</h3>
+                <button
+                  onClick={() => setIsAddChildModalOpen(true)}
+                  className="text-xs text-purple-600 font-bold hover:underline mt-0.5 inline-block cursor-pointer"
+                >
+                  + Add Child
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -113,12 +203,18 @@ export const ParentDashboard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-black text-slate-900">Moderate</span>
-              <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
-                Risk
+              <span className="text-lg font-black text-slate-900">
+                {selectedChild?.supportIndicator && selectedChild.supportIndicator !== 'NOT_ASSESSED'
+                  ? selectedChild.supportIndicator
+                  : 'Ready'}
+              </span>
+              <span className="text-[10px] font-bold bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">
+                {selectedChild?.assessmentStatus || 'Pending'}
               </span>
             </div>
-            <span className="text-xs text-slate-500 font-medium">Completed May 10</span>
+            <span className="text-xs text-slate-500 font-medium">
+              {selectedChild?.lastAssessmentDate ? `Updated ${selectedChild.lastAssessmentDate}` : 'AI Screening Ready'}
+            </span>
           </div>
         </div>
 
@@ -130,10 +226,10 @@ export const ParentDashboard: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-black text-slate-900 truncate">
-              {parentAppointments[0] ? `${parentAppointments[0].date} @ ${parentAppointments[0].time}` : 'May 14 @ 10:00 AM'}
+              {parentAppointments[0] ? `${parentAppointments[0].date} @ ${parentAppointments[0].time}` : 'No upcoming session'}
             </h3>
             <span className="text-xs text-purple-600 font-semibold truncate block">
-              {parentAppointments[0] ? parentAppointments[0].therapistName : 'Dr. Anjali Sharma'}
+              {parentAppointments[0] ? parentAppointments[0].therapistName : 'Book a therapist slot'}
             </span>
           </div>
         </div>
@@ -154,9 +250,9 @@ export const ParentDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Recharts Behavioral Progression & Quick Action Grid */}
+      {/* 3. Behavioral Progression & Quick Action Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Behavioral Progress Chart (8 cols) */}
+        {/* Behavioral Progress Chart */}
         <div className="lg:col-span-8 p-6 rounded-3xl bg-white border border-slate-100 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -201,7 +297,7 @@ export const ParentDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick AI & Therapy Actions (4 cols) */}
+        {/* Quick AI & Therapy Actions */}
         <div className="lg:col-span-4 p-6 rounded-3xl bg-white border border-slate-100 shadow-xs space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-purple-600 font-extrabold text-sm">
@@ -215,11 +311,13 @@ export const ParentDashboard: React.FC = () => {
 
             <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-100 space-y-2">
               <div className="flex items-center justify-between text-xs font-bold text-purple-900">
-                <span>Recent Test Result</span>
-                <span className="text-purple-600 font-extrabold">Moderate Risk</span>
+                <span>Active Profile</span>
+                <span className="text-purple-600 font-extrabold">{selectedChild?.name || 'None'}</span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium">
-                4-domain evaluation suggests targeted occupational therapy.
+                {selectedChild
+                  ? `Age ${selectedChild.age} yrs • Support Level: ${selectedChild.supportIndicator}`
+                  : 'Register a child to view clinical analysis and screening recommendations.'}
               </p>
             </div>
           </div>
@@ -229,7 +327,7 @@ export const ParentDashboard: React.FC = () => {
               onClick={() => navigate('/parent/assessment/new')}
               className="w-full py-3 px-4 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md shadow-purple-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Retake AI Screening</span>
+              <span>{selectedChild ? 'Take AI Screening' : 'Start AI Screening'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
@@ -243,7 +341,7 @@ export const ParentDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Top Recommended Therapists Showcase (Matching Reference Screen 6) */}
+      {/* 4. Top Recommended Therapists Showcase */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -303,6 +401,12 @@ export const ParentDashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      <AddChildModal
+        isOpen={isAddChildModalOpen}
+        onClose={() => setIsAddChildModalOpen(false)}
+        onSuccess={fetchChildren}
+      />
 
       <VideoUploadModal
         isOpen={isVideoModalOpen}

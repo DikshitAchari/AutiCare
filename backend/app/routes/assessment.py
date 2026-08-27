@@ -14,13 +14,23 @@ router = APIRouter(prefix="/api", tags=["assessment"])
 
 @router.post("/children", response_model=ChildOut, status_code=status.HTTP_201_CREATED)
 def create_child(child_in: ChildCreate, token_payload: dict = Depends(get_current_user_token), db: Session = Depends(get_db)):
+    from datetime import datetime
+
     user_id = int(token_payload.get("sub"))
+    current_year = datetime.now().year
+    birth_year = (
+        int(child_in.dob[:4])
+        if child_in.dob and len(child_in.dob) >= 4 and child_in.dob[:4].isdigit()
+        else current_year
+    )
+    calculated_age = max(0, current_year - birth_year)
+
     child = ChildProfile(
         parent_id=user_id,
-        name=child_in.name,
+        name=child_in.name.strip(),
         dob=child_in.dob,
-        age=2026 - int(child_in.dob[:4]) if child_in.dob and len(child_in.dob) >= 4 else 0,
-        gender=child_in.gender,
+        age=calculated_age,
+        gender=child_in.gender or "Male",
         school=child_in.school,
         grade=child_in.grade,
         parent_notes=child_in.parent_notes,
@@ -48,7 +58,13 @@ def create_child(child_in: ChildCreate, token_payload: dict = Depends(get_curren
 @router.get("/children", response_model=List[ChildOut])
 def list_children(token_payload: dict = Depends(get_current_user_token), db: Session = Depends(get_db)):
     user_id = int(token_payload.get("sub"))
-    children = db.query(ChildProfile).filter(ChildProfile.parent_id == user_id).all()
+    user_role = str(token_payload.get("role", "PARENT")).upper()
+
+    if user_role in ["THERAPIST", "ADMIN"]:
+        children = db.query(ChildProfile).all()
+    else:
+        children = db.query(ChildProfile).filter(ChildProfile.parent_id == user_id).all()
+
     return [
         ChildOut(
             id=child.id,

@@ -3,12 +3,36 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
+class ChildCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    dob: str
+    gender: str = Field(default="Male")
+    school: Optional[str] = None
+    grade: Optional[str] = None
+    parent_notes: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value):
+        if not value or not value.strip():
+            raise ValueError("Child name is required")
+        return value.strip()
+
+    @field_validator("dob")
+    @classmethod
+    def validate_dob(cls, value):
+        if not value:
+            raise ValueError("Date of birth is required")
+        return value
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     name: str = Field(..., min_length=2)
     role: str = Field(default="PARENT")
     phone: Optional[str] = None
+    child: Optional[ChildCreate] = None
 
 
 class UserLogin(BaseModel):
@@ -32,22 +56,6 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
-
-
-class ChildCreate(BaseModel):
-    name: str
-    dob: str
-    gender: str
-    school: Optional[str] = None
-    grade: Optional[str] = None
-    parent_notes: Optional[str] = None
-
-    @field_validator("dob")
-    @classmethod
-    def validate_dob(cls, value):
-        if not value:
-            raise ValueError("Date of birth is required")
-        return value
 
 
 class ChildOut(BaseModel):
