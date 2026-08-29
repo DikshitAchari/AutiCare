@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { AssessmentResult } from '../../types/assessment';
 import { StatusBadge } from '../ui/StatusBadge';
 import { Button } from '../ui/Button';
-import { ArrowRight, Calendar, Download, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Calendar, Download, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { predictionApi } from '../../services/api/predictionApi';
 
 export interface ScreeningResultVisualizerProps {
   result: AssessmentResult;
@@ -11,15 +12,46 @@ export interface ScreeningResultVisualizerProps {
 
 export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps> = ({ result }) => {
   const navigate = useNavigate();
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    if (!result.id) return;
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      const blob = await predictionApi.downloadReport(result.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `AutiCare_Clinical_Report_${result.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error('Failed to download report:', err);
+      setDownloadError(err?.message || 'Failed to generate report. Please try again.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const domainScores = result.domainScores.map((domain, index) => ({
     name: domain.categoryName || domain.category,
-    score: domain.percentage ?? domain.scorePercentage ?? 0,
+    score: domain.percentage,
+    notAnalyzed: domain.percentage === null || domain.percentage === undefined,
+    statusText: domain.statusText || 'Not analyzed by current model',
     color: ['bg-purple-600', 'bg-amber-500', 'bg-indigo-600', 'bg-emerald-500'][index % 4]
   }));
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {downloadError && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl">
+          {downloadError}
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -31,10 +63,12 @@ export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            leftIcon={<Download className="w-4 h-4" />}
-            className="rounded-xl border-slate-200"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            leftIcon={isDownloading ? <Loader2 className="w-4 h-4 animate-spin text-purple-600" /> : <Download className="w-4 h-4" />}
+            className="rounded-xl border-slate-200 cursor-pointer font-bold"
           >
-            Download PDF
+            {isDownloading ? 'Generating report...' : 'Download Report'}
           </Button>
           <Button
             onClick={() => navigate('/parent/therapists')}
@@ -81,14 +115,24 @@ export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps>
             <div key={item.name} className="space-y-2 p-4 bg-purple-50/30 rounded-2xl border border-purple-100/60">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-extrabold text-slate-800">{item.name}</span>
-                <span className="font-mono font-bold text-purple-700">{item.score}%</span>
+                {item.notAnalyzed ? (
+                  <span className="text-[11px] font-semibold text-slate-400 italic bg-slate-100 px-2 py-0.5 rounded-md">
+                    {item.statusText}
+                  </span>
+                ) : (
+                  <span className="font-mono font-bold text-purple-700">{item.score}%</span>
+                )}
               </div>
-              <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${item.color} rounded-full transition-all duration-500`}
-                  style={{ width: `${item.score}%` }}
-                />
-              </div>
+              {item.notAnalyzed ? (
+                <div className="w-full h-2 bg-slate-100 rounded-full border border-dashed border-slate-200" />
+              ) : (
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
+                    style={{ width: `${item.score}%` }}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

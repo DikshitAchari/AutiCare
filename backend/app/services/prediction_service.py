@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import shlex
 import subprocess
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.orm import Session
 
@@ -128,9 +131,12 @@ class PredictionService:
         if settings.ai_video_model_path:
             env["AI_VIDEO_MODEL_PATH"] = settings.ai_video_model_path
 
+        full_cmd = [*command, video_path]
+        logger.info(f"[MODEL COMMAND] {' '.join(full_cmd)}")
+
         try:
             completed = subprocess.run(
-                [*command, video_path],
+                full_cmd,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -142,14 +148,33 @@ class PredictionService:
         except subprocess.TimeoutExpired as exc:
             raise ModelInferenceError("Video model inference timed out.") from exc
 
+        logger.info(f"[MODEL EXIT CODE] {completed.returncode}")
+        print(f"MODEL EXIT CODE: {completed.returncode}")
+        logger.info(f"[MODEL STDOUT] {completed.stdout.strip()}")
+        print(f"MODEL STDOUT: {completed.stdout.strip()}")
+        if completed.stderr:
+            logger.info(f"[MODEL STDERR] {completed.stderr.strip()}")
+
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip() or "Model command failed without output."
             raise ModelInferenceError(detail)
 
+        stdout_text = completed.stdout.strip()
+        json_start = stdout_text.find("{")
+        json_end = stdout_text.rfind("}") + 1
+        if json_start != -1 and json_end > json_start:
+            json_str = stdout_text[json_start:json_end]
+        else:
+            json_str = stdout_text
+
         try:
-            payload = json.loads(completed.stdout)
+            payload = json.loads(json_str)
         except json.JSONDecodeError as exc:
-            raise ModelInferenceError("Video model command must return valid JSON on stdout.") from exc
+            raise ModelInferenceError(f"Video model command must return valid JSON on stdout. Received: {stdout_text[:300]}") from exc
+
+        logger.info(f"[RAW MODEL RESULT] {json_str}")
+        logger.info(f"[PARSED RESULT] {payload}")
+        print(f"PARSED RESULT: {payload}")
 
         required = {"support_indicator", "confidence_score", "percentage", "summary", "recommendations"}
         missing = sorted(required - payload.keys())

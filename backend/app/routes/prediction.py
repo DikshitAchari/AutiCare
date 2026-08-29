@@ -24,7 +24,17 @@ ALLOWED_VIDEO_TYPES = {
 }
 
 
+import logging
+import cv2
+
+logger = logging.getLogger(__name__)
+
+
 def to_prediction_response(record: PredictionAnalysis) -> PredictionResponse:
+    domain_breakdown = None
+    if isinstance(record.raw_output, dict) and "domain_breakdown" in record.raw_output:
+        domain_breakdown = record.raw_output["domain_breakdown"]
+
     return PredictionResponse(
         id=record.id,
         child_id=record.child_id,
@@ -35,6 +45,7 @@ def to_prediction_response(record: PredictionAnalysis) -> PredictionResponse:
         recommendations=record.recommendations or [],
         disclaimer=record.disclaimer,
         source=record.source,
+        domain_breakdown=domain_breakdown,
         created_at=record.created_at.isoformat() if record.created_at else None,
     )
 
@@ -129,6 +140,33 @@ async def analyze_video(
                     )
                 temp_file.write(chunk)
 
+        # Inspect and log uploaded video properties
+        cap = cv2.VideoCapture(temp_path)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        duration = frame_count / fps if fps > 0 else 0.0
+        cap.release()
+        file_size = os.path.getsize(temp_path)
+
+        logger.info(
+            f"[VIDEO UPLOAD VERIFIED]\n"
+            f"  - filename: {file.filename}\n"
+            f"  - file size: {file_size} bytes\n"
+            f"  - MIME type: {file.content_type}\n"
+            f"  - temporary path: {temp_path}\n"
+            f"  - duration: {duration:.2f}s\n"
+            f"  - width: {width}\n"
+            f"  - height: {height}\n"
+            f"  - FPS: {fps:.2f}\n"
+            f"  - frame count: {frame_count}"
+        )
+
+        print(f"UPLOAD FILE: {file.filename}")
+        print(f"TEMP FILE: {temp_path}")
+        print(f"MODEL CHECKPOINT: {settings.ai_video_model_path}")
+
         result = PredictionService.analyze_video(temp_path)
         record = PredictionService.save_result(
             db,
@@ -139,7 +177,14 @@ async def analyze_video(
             model_name=settings.ai_video_model_command,
             raw_output=result,
         )
-        return to_prediction_response(record)
+        logger.info(
+            f"[POSTGRESQL RECORD SAVED] Prediction ID={record.id}, child_id={child_id}, "
+            f"user_id={user_id}, support={record.support_indicator}, percentage={record.percentage}"
+        )
+        response = to_prediction_response(record)
+        print(f"DATABASE PREDICTION ID: {record.id}")
+        print(f"FINAL API RESPONSE: {response.model_dump_json()}")
+        return response
     except HTTPException:
         raise
     except ValueError as exc:
@@ -154,3 +199,35 @@ async def analyze_video(
         await file.close()
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+from fastapi.responses import StreamingResponse
+from app.services.report_service import generate_prediction_pdf
+from app.models.user import ChildProfile
+
+
+@router.get("/prediction/results/{prediction_id}/report")
+def download_prediction_report(
+    prediction_id: int,
+    token_payload: dict = Depends(get_current_user_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(token_payload.get("sub"))
+    user_role = token_payload.get("role", "").upper()
+
+    record = db.query(PredictionAnalysis).filter(PredictionAnalysis.id == prediction_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prediction analysis result not found")
+
+    if user_role == "PARENT" and record.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to download this report")
+
+    child = db.query(ChildProfile).filter(ChildProfile.id == record.child_id).first()
+    pdf_buffer = generate_prediction_pdf(record, child)
+
+    filename = f"AutiCare_Clinical_Report_{prediction_id}.pdf"
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )

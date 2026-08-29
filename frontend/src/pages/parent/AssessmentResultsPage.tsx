@@ -1,33 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ScreeningResultVisualizer } from '../../components/assessments/ScreeningResultVisualizer';
-import type { AssessmentResult } from '../../types/assessment';
+import type { AssessmentResult, DomainScore } from '../../types/assessment';
 import { predictionApi, type PredictionResult } from '../../services/api/predictionApi';
 import { Loader2 } from 'lucide-react';
 
-const toAssessmentResult = (p: PredictionResult): AssessmentResult => ({
-  id: p.id || '1',
-  childId: p.childId,
-  childName: 'Child Profile',
-  completedDate: p.createdAt || new Date().toISOString(),
-  totalScore: p.percentage,
-  maxScore: 100,
-  percentage: p.percentage,
-  confidenceScore: p.confidenceScore,
-  supportIndicator: (p.supportIndicator as any) || 'MODERATE',
-  summary: p.summary,
-  recommendations: p.recommendations,
-  disclaimer: p.disclaimer,
-  domainScores: [
-    { category: 'Repetitive Behaviour', categoryName: 'Restricted & Repetitive Behaviors', percentage: p.percentage },
-    { category: 'Social Interaction', categoryName: 'Social Interaction & Response', percentage: Math.max(20, p.percentage - 10) },
-    { category: 'Communication', categoryName: 'Non-Verbal Communication', percentage: Math.max(15, p.percentage - 15) },
-    { category: 'Sensory Responses', categoryName: 'Sensory Adaptation', percentage: Math.max(25, p.percentage - 5) }
-  ]
-});
+const toAssessmentResult = (p: PredictionResult): AssessmentResult => {
+  const rrbBreakdown = p.domainBreakdown?.['rrb'];
+  const hasSubject = p.percentage > 0 || (rrbBreakdown && rrbBreakdown.status !== 'no_subject');
+
+  const domainScores: DomainScore[] = [
+    {
+      category: 'Repetitive Behaviour',
+      categoryName: 'Restricted & Repetitive Behaviors',
+      percentage: hasSubject ? (rrbBreakdown?.percentage ?? p.percentage) : null,
+      statusText: rrbBreakdown?.description || (hasSubject ? undefined : 'No human subject detected')
+    },
+    {
+      category: 'Social Interaction',
+      categoryName: 'Social Interaction & Response',
+      percentage: null,
+      statusText: 'Not analyzed by current model'
+    },
+    {
+      category: 'Communication',
+      categoryName: 'Non-Verbal Communication',
+      percentage: null,
+      statusText: 'Not analyzed by current model'
+    },
+    {
+      category: 'Sensory Responses',
+      categoryName: 'Sensory Adaptation',
+      percentage: null,
+      statusText: 'Not analyzed by current model'
+    }
+  ];
+
+  return {
+    id: p.id || '1',
+    childId: p.childId,
+    childName: 'Child Profile',
+    completedDate: p.createdAt || new Date().toISOString(),
+    totalScore: p.percentage,
+    maxScore: 100,
+    percentage: p.percentage,
+    confidenceScore: p.confidenceScore,
+    supportIndicator: (p.supportIndicator as any) || 'LOW',
+    summary: p.summary,
+    recommendations: p.recommendations,
+    disclaimer: p.disclaimer,
+    domainScores
+  };
+};
 
 export const AssessmentResultsPage: React.FC = () => {
   const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const queryPredictionId = searchParams.get('id');
   const stateResult = (location.state as { result?: any } | null)?.result;
 
   const [activeResult, setActiveResult] = useState<AssessmentResult | null>(() => {
@@ -41,16 +70,23 @@ export const AssessmentResultsPage: React.FC = () => {
 
   useEffect(() => {
     if (!activeResult) {
-      predictionApi.getPredictionResults()
-        .then((list) => {
-          if (list.length > 0) {
-            setActiveResult(toAssessmentResult(list[0]));
-          }
-        })
-        .catch((err) => console.error('Failed to load analysis history:', err))
-        .finally(() => setLoading(false));
+      if (queryPredictionId) {
+        predictionApi.getPredictionResultById(queryPredictionId)
+          .then((res: PredictionResult) => setActiveResult(toAssessmentResult(res)))
+          .catch((err: unknown) => console.error('Failed to load prediction by ID:', err))
+          .finally(() => setLoading(false));
+      } else {
+        predictionApi.getPredictionResults()
+          .then((list) => {
+            if (list.length > 0) {
+              setActiveResult(toAssessmentResult(list[0]));
+            }
+          })
+          .catch((err) => console.error('Failed to load analysis history:', err))
+          .finally(() => setLoading(false));
+      }
     }
-  }, [activeResult]);
+  }, [activeResult, queryPredictionId]);
 
   if (loading) {
     return (

@@ -133,6 +133,7 @@ class PredictionResponse(BaseModel):
     recommendations: List[str]
     disclaimer: str
     source: str = "questionnaire"
+    domain_breakdown: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
 
 

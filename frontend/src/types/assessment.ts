@@ -35,7 +35,8 @@ export interface DomainScore {
   obtainedScore?: number;
   scorePercentage?: number;
   maxScore?: number;
-  percentage?: number;
+  percentage?: number | null;
+  statusText?: string;
   riskLevel?: string;
 }
 

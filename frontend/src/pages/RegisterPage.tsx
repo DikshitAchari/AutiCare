@@ -264,9 +264,10 @@ export const RegisterPage: React.FC = () => {
             <Button
               type="submit"
               isLoading={isLoading}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg shadow-purple-600/25 transition-all text-sm cursor-pointer"
+              disabled={isLoading}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-3.5 rounded-xl shadow-lg shadow-purple-600/25 transition-all text-sm cursor-pointer disabled:opacity-60"
             >
-              {role === 'PARENT' ? 'Register Parent & Child' : 'Create Account'}
+              {isLoading ? 'Creating account...' : (role === 'PARENT' ? 'Register Parent & Child' : 'Create Account')}
             </Button>
           </form>
 

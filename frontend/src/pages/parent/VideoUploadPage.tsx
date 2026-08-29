@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { UploadCloud, CheckCircle2, FileVideo, ShieldAlert, ArrowRight } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileVideo, ShieldAlert, ArrowRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { childApi } from '../../services/api/childApi';
 import { predictionApi } from '../../services/api/predictionApi';
@@ -15,8 +15,11 @@ export const VideoUploadPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [children, setChildren] = useState<Child[]>([]);
   const [selectedChildId, setSelectedChildId] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  type UploadStage = 'idle' | 'uploading' | 'preparing' | 'analyzing' | 'saving' | 'complete';
+  const [uploadStage, setUploadStage] = useState<UploadStage>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -43,6 +46,23 @@ export const VideoUploadPage: React.FC = () => {
     }
   };
 
+  const getStageMessage = () => {
+    switch (uploadStage) {
+      case 'uploading':
+        return 'Uploading video...';
+      case 'preparing':
+        return 'Video uploaded. Preparing analysis...';
+      case 'analyzing':
+        return 'AI model is analyzing the video...';
+      case 'saving':
+        return 'Saving analysis result...';
+      case 'complete':
+        return 'Analysis complete.';
+      default:
+        return '';
+    }
+  };
+
   const handleUpload = async () => {
     if (!selectedFile) {
       showToast('Please select or drag a video file first', 'warning');
@@ -53,12 +73,31 @@ export const VideoUploadPage: React.FC = () => {
       return;
     }
     setIsUploading(true);
+    setErrorMessage(null);
+    setUploadStage('uploading');
+
+    // Discrete stage transitions based on processing milestones
+    const prepTimer = setTimeout(() => setUploadStage('preparing'), 1200);
+    const analyzeTimer = setTimeout(() => setUploadStage('analyzing'), 3000);
+
     try {
       const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile);
-      showToast('AI4ASD behavior video analyzed successfully!', 'success');
-      navigate('/parent/results', { state: { result } });
+      clearTimeout(prepTimer);
+      clearTimeout(analyzeTimer);
+      setUploadStage('saving');
+      
+      setTimeout(() => {
+        setUploadStage('complete');
+        showToast('AI4ASD behavior video analyzed successfully!', 'success');
+        navigate(`/parent/results?id=${result.id}`, { state: { result } });
+      }, 500);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Video analysis failed', 'error');
+      clearTimeout(prepTimer);
+      clearTimeout(analyzeTimer);
+      setUploadStage('idle');
+      const msg = error instanceof Error ? error.message : 'Video analysis failed';
+      setErrorMessage(msg);
+      showToast(msg, 'error');
     } finally {
       setIsUploading(false);
     }
@@ -154,17 +193,31 @@ export const VideoUploadPage: React.FC = () => {
             </ul>
           </div>
 
-          <div className="md:col-span-4 flex justify-end">
+          <div className="md:col-span-4 flex flex-col items-end gap-3">
+            {uploadStage !== 'idle' && (
+              <div className="w-full p-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 flex items-center gap-2 text-xs font-bold shadow-xs">
+                <Loader2 className="w-4 h-4 animate-spin text-purple-600 shrink-0" />
+                <span>{getStageMessage()}</span>
+              </div>
+            )}
+            {errorMessage && (
+              <div className="w-full p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold">
+                {errorMessage}
+              </div>
+            )}
             <button
               onClick={handleUpload}
               disabled={isUploading}
               className="w-full sm:w-auto px-8 py-3 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md shadow-purple-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isUploading ? (
-                <span>Uploading...</span>
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Processing...</span>
+                </>
               ) : (
                 <>
-                  <span>Upload Video</span>
+                  <span>Upload & Analyze Video</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

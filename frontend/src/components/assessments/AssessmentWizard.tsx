@@ -16,7 +16,7 @@ export const AssessmentWizard: React.FC<AssessmentWizardProps> = ({ childrenList
   const { showToast } = useToast();
 
   const [selectedChildId, setSelectedChildId] = useState(childrenList[0]?.id || '');
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(7); // Question 8 default
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0); // Start at Question 1
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 

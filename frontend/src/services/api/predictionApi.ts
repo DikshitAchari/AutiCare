@@ -1,5 +1,13 @@
 import { request } from './apiClient';
 
+export interface DomainBreakdownItem {
+  status: string;
+  percentage: number | null;
+  action?: string;
+  action_confidence?: number;
+  description: string;
+}
+
 export interface PredictionResult {
   id?: string;
   childId: string;
@@ -10,6 +18,7 @@ export interface PredictionResult {
   recommendations: string[];
   disclaimer: string;
   source?: string;
+  domainBreakdown?: Record<string, DomainBreakdownItem>;
   createdAt?: string;
 }
 
@@ -23,6 +32,7 @@ interface BackendPredictionResponse {
   recommendations: string[];
   disclaimer: string;
   source?: string;
+  domain_breakdown?: Record<string, DomainBreakdownItem>;
   created_at?: string | null;
 }
 
@@ -36,6 +46,7 @@ const toPredictionResult = (result: BackendPredictionResponse): PredictionResult
   recommendations: result.recommendations,
   disclaimer: result.disclaimer,
   source: result.source,
+  domainBreakdown: result.domain_breakdown,
   createdAt: result.created_at ?? undefined
 });
 
@@ -69,5 +80,18 @@ export const predictionApi = {
   getPredictionResults: async (): Promise<PredictionResult[]> => {
     const results = await request<BackendPredictionResponse[]>('/api/prediction/results');
     return results.map(toPredictionResult);
+  },
+
+  downloadReport: async (predictionId: string): Promise<Blob> => {
+    const token = localStorage.getItem('auticare_token');
+    const response = await fetch(`/api/prediction/results/${predictionId}/report`, {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : ''
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Report generation failed: ${response.statusText}`);
+    }
+    return response.blob();
   }
 };
