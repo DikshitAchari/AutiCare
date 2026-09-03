@@ -125,7 +125,7 @@ export const LoginPage: React.FC = () => {
               </label>
               <button
                 type="button"
-                onClick={() => showToast('Please contact support to reset your password.', 'info')}
+                onClick={() => navigate('/forgot-password')}
                 className="font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
               >
                 Forgot Password?

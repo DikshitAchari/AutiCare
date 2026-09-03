@@ -3,8 +3,18 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 from app.core.security import get_current_user_token
-from app.schemas.user import TokenResponse, UserCreate, UserLogin, UserOut
+from app.schemas.user import (
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserOut,
+    ForgotPasswordRequest,
+    VerifyOTPRequest,
+    ResetPasswordRequest,
+    PasswordResetResponse,
+)
 from app.services.auth_service import AuthService
+from app.services.password_reset_service import PasswordResetService
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -40,3 +50,53 @@ def get_me(token_payload: dict = Depends(get_current_user_token), db: Session = 
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return AuthService.convert_user(user)
+
+
+@router.post("/forgot-password", response_model=PasswordResetResponse)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Initiate password reset by sending OTP to user's email."""
+    try:
+        success = PasswordResetService.initiate_password_reset(db, payload.email)
+        if success:
+            return PasswordResetResponse(
+                message="If this email is registered, you will receive an OTP shortly.",
+                success=True,
+            )
+        else:
+            # Still return success to avoid email enumeration
+            return PasswordResetResponse(
+                message="If this email is registered, you will receive an OTP shortly.",
+                success=True,
+            )
+    except Exception as exc:
+        # Don't reveal specific errors to prevent email enumeration
+        return PasswordResetResponse(
+            message="If this email is registered, you will receive an OTP shortly.",
+            success=True,
+        )
+
+
+@router.post("/verify-reset-otp", response_model=PasswordResetResponse)
+def verify_reset_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
+    """Verify OTP for password reset."""
+    try:
+        PasswordResetService.verify_otp(db, payload.email, payload.otp)
+        return PasswordResetResponse(
+            message="OTP verified successfully.",
+            success=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset user password after OTP verification."""
+    try:
+        PasswordResetService.reset_password(db, payload.email, payload.new_password)
+        return PasswordResetResponse(
+            message="Password reset successfully.",
+            success=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

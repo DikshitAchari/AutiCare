@@ -13,6 +13,7 @@ import { ProtectedRoute, RoleRoute } from './routes/RouteGuards';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 
 // Parent Portal Pages
 import { ParentDashboard } from './pages/parent/ParentDashboard';
@@ -61,6 +62,7 @@ export function App() {
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
                   {/* Protected Portals */}
                   <Route element={<ProtectedRoute />}>

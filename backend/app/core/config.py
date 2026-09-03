@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     ai_video_model_path: Optional[str] = None
     ai_video_model_command: Optional[str] = None
     openai_api_key: Optional[str] = None
+    # Email configuration
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_email: str = "noreply@auticare.com"
+    otp_expire_minutes: int = 10
+    max_otp_attempts: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",

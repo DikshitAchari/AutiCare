@@ -16,6 +16,12 @@ class User(Base):
     status = Column(String, nullable=True, default="ACTIVE")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)
+    # Password reset fields
+    otp = Column(String, nullable=True)
+    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+    otp_attempts = Column(Integer, default=0, nullable=False)
+    reset_token = Column(String, nullable=True)
+    reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class ChildProfile(Base):

@@ -16,6 +16,11 @@ interface BackendUser {
   status?: string | null;
 }
 
+interface PasswordResetResponse {
+  message: string;
+  success: boolean;
+}
+
 const toSession = (user: BackendUser): UserSession => ({
   id: String(user.id),
   email: user.email,
@@ -43,5 +48,26 @@ export const authApi = {
   },
 
   getCurrentUser: (token: string): Promise<UserSession> =>
-    request<BackendUser>('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).then(toSession)
+    request<BackendUser>('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).then(toSession),
+
+  forgotPassword: async (payload: { email: string }): Promise<PasswordResetResponse> => {
+    return request<PasswordResetResponse>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  verifyResetOTP: async (payload: { email: string; otp: string }): Promise<PasswordResetResponse> => {
+    return request<PasswordResetResponse>('/api/auth/verify-reset-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  resetPassword: async (payload: { email: string; new_password: string; confirm_password: string }): Promise<PasswordResetResponse> => {
+    return request<PasswordResetResponse>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
 };
