@@ -57,6 +57,16 @@ export interface AssessmentResult {
   summary: string;
   recommendations: string[];
   disclaimer: string;
+  models?: Record<string, any>;
+  therapistRecommendations?: Array<{
+    specialization: string;
+    rationale: string;
+    suggested_focus?: string[];
+    priority?: string;
+  }>;
+  videoMetadata?: Record<string, any>;
+  rawModelMetrics?: Record<string, any>;
+  videoAnalysis?: Record<string, any>;
 }
 
 export type ScreeningResult = AssessmentResult;

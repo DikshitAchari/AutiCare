@@ -25,15 +25,29 @@ ALLOWED_VIDEO_TYPES = {
 
 
 import logging
-import cv2
 
 logger = logging.getLogger(__name__)
 
 
 def to_prediction_response(record: PredictionAnalysis) -> PredictionResponse:
     domain_breakdown = None
-    if isinstance(record.raw_output, dict) and "domain_breakdown" in record.raw_output:
-        domain_breakdown = record.raw_output["domain_breakdown"]
+    models = None
+    therapist_recommendations = None
+    video_metadata = None
+    raw_model_metrics = None
+    normalized_features = None
+    video_analysis = None
+    timing = None
+
+    if isinstance(record.raw_output, dict):
+        domain_breakdown = record.raw_output.get("domain_breakdown")
+        models = record.raw_output.get("models")
+        therapist_recommendations = record.raw_output.get("therapist_recommendations")
+        video_metadata = record.raw_output.get("video_metadata")
+        raw_model_metrics = record.raw_output.get("raw_model_metrics")
+        normalized_features = record.raw_output.get("normalized_features")
+        video_analysis = record.raw_output.get("video_analysis")
+        timing = record.raw_output.get("timing")
 
     return PredictionResponse(
         id=record.id,
@@ -46,6 +60,13 @@ def to_prediction_response(record: PredictionAnalysis) -> PredictionResponse:
         disclaimer=record.disclaimer,
         source=record.source,
         domain_breakdown=domain_breakdown,
+        models=models,
+        therapist_recommendations=therapist_recommendations,
+        video_metadata=video_metadata,
+        raw_model_metrics=raw_model_metrics,
+        normalized_features=normalized_features,
+        video_analysis=video_analysis,
+        timing=timing,
         created_at=record.created_at.isoformat() if record.created_at else None,
     )
 
@@ -140,34 +161,28 @@ async def analyze_video(
                     )
                 temp_file.write(chunk)
 
-        # Inspect and log uploaded video properties
-        cap = cv2.VideoCapture(temp_path)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = float(cap.get(cv2.CAP_PROP_FPS)) or 0.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        duration = frame_count / fps if fps > 0 else 0.0
-        cap.release()
         file_size = os.path.getsize(temp_path)
-
         logger.info(
-            f"[VIDEO UPLOAD VERIFIED]\n"
+            f"[VIDEO UPLOAD RECEIVED]\n"
             f"  - filename: {file.filename}\n"
             f"  - file size: {file_size} bytes\n"
             f"  - MIME type: {file.content_type}\n"
-            f"  - temporary path: {temp_path}\n"
-            f"  - duration: {duration:.2f}s\n"
-            f"  - width: {width}\n"
-            f"  - height: {height}\n"
-            f"  - FPS: {fps:.2f}\n"
-            f"  - frame count: {frame_count}"
+            f"  - temporary path: {temp_path}"
         )
 
         print(f"UPLOAD FILE: {file.filename}")
         print(f"TEMP FILE: {temp_path}")
         print(f"MODEL CHECKPOINT: {settings.ai_video_model_path}")
 
-        result = PredictionService.analyze_video(temp_path)
+        child = db.query(ChildProfile).filter(ChildProfile.id == child_id).first()
+        child_info = {
+            "id": child.id,
+            "name": child.name,
+            "age": child.age,
+            "gender": child.gender,
+        } if child else None
+
+        result = PredictionService.analyze_video(temp_path, child_info=child_info)
         record = PredictionService.save_result(
             db,
             child_id=child_id,
@@ -201,7 +216,7 @@ async def analyze_video(
             os.remove(temp_path)
 
 
-from fastapi.responses import StreamingResponse
+from fastapi import Response
 from app.services.report_service import generate_prediction_pdf
 from app.models.user import ChildProfile
 
@@ -222,12 +237,17 @@ def download_prediction_report(
     if user_role == "PARENT" and record.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to download this report")
 
-    child = db.query(ChildProfile).filter(ChildProfile.id == record.child_id).first()
+    child = db.query(ChildProfile).filter(ChildProfile.id == record.child_id).first() if record.child_id else None
     pdf_buffer = generate_prediction_pdf(record, child)
+    pdf_bytes = pdf_buffer.getvalue()
 
-    filename = f"AutiCare_Clinical_Report_{prediction_id}.pdf"
-    return StreamingResponse(
-        pdf_buffer,
+    filename = f"AutiCare_Behavioral_Report_{prediction_id}.pdf"
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(pdf_bytes)),
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
     )

@@ -18,6 +18,19 @@ class Settings(BaseSettings):
     max_video_upload_mb: int = 100
     ai_video_model_path: Optional[str] = None
     ai_video_model_command: Optional[str] = None
+    asdmotion_model_path: Optional[str] = None
+    asdmotion_model_command: Optional[str] = None
+    basst_model_path: Optional[str] = None
+    basst_model_command: Optional[str] = None
+
+    av_asd_model_path: Optional[str] = None
+    av_asd_model_command: Optional[str] = None
+
+    video_audio_model_path: Optional[str] = None
+    video_audio_model_command: Optional[str] = None
+
+    homevideo_model_path: Optional[str] = None
+    homevideo_model_command: Optional[str] = None
     openai_api_key: Optional[str] = None
 
     model_config = SettingsConfigDict(

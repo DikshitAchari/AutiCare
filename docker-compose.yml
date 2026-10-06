@@ -1,0 +1,91 @@
+services:
+  # -------------------------------------------------------------------------
+  # PostgreSQL Database Service
+  # -------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: auticare-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-auticare_db}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-auticare_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - auticare-network
+
+  # -------------------------------------------------------------------------
+  # FastAPI Backend Service + AI4ASD Inference Pipeline
+  # -------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: auticare-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_NAME: ${APP_NAME:-AutiCare API}
+      APP_ENV: ${APP_ENV:-production}
+      DEBUG: ${DEBUG:-false}
+      SECRET_KEY: ${SECRET_KEY:-auticare_production_secret_key_change_me_12345}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-120}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-auticare_db}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:80,http://localhost,http://127.0.0.1:5173}
+      MAX_VIDEO_UPLOAD_MB: ${MAX_VIDEO_UPLOAD_MB:-100}
+      AI_VIDEO_MODEL_PATH: /app/AI4ASD/pbr4RRB/checkpoints/RRB_LA_Net_tr_countix.checkpoint
+      AI_VIDEO_MODEL_COMMAND: python /app/AI4ASD/pbr4RRB/run_rrb_inference.py
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Mount model checkpoints directory for live checkpoint updates if needed
+      - ./AI4ASD:/app/AI4ASD:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - auticare-network
+
+  # -------------------------------------------------------------------------
+  # React + TypeScript + Vite Frontend Service
+  # -------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: auticare-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+      - "${HTTP_PORT:-80}:80"
+    networks:
+      - auticare-network
+
+networks:
+  auticare-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

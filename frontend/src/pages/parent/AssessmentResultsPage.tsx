@@ -49,7 +49,12 @@ const toAssessmentResult = (p: PredictionResult): AssessmentResult => {
     summary: p.summary,
     recommendations: p.recommendations,
     disclaimer: p.disclaimer,
-    domainScores
+    domainScores,
+    models: p.models,
+    therapistRecommendations: p.therapistRecommendations,
+    videoMetadata: p.videoMetadata,
+    rawModelMetrics: p.rawModelMetrics,
+    videoAnalysis: p.videoAnalysis,
   };
 };
 

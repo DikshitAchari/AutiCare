@@ -108,81 +108,27 @@ class PredictionService:
         return record
 
     @staticmethod
-    def analyze_video(video_path: str) -> dict:
-        get_settings.cache_clear()
-        settings = get_settings()
-        if not settings.ai_video_model_command:
-            raise ModelConfigurationError(
-                "Real AI model cannot run because the required model artifact/weights are missing. "
-                "Please configure AI_VIDEO_MODEL_COMMAND or AI_VIDEO_MODEL_PATH in backend/.env pointing to the trained model weights/inference script."
-            )
-
-        if settings.ai_video_model_path:
-            if not os.path.exists(settings.ai_video_model_path):
-                raise ModelConfigurationError(f"Configured model file does not exist: {settings.ai_video_model_path}")
-            if os.path.getsize(settings.ai_video_model_path) == 0:
-                raise ModelConfigurationError(f"Configured model file is empty: {settings.ai_video_model_path}")
-
-        command = shlex.split(settings.ai_video_model_command, posix=False)
-        if not command:
-            raise ModelConfigurationError("AI_VIDEO_MODEL_COMMAND is empty.")
-
-        env = os.environ.copy()
-        if settings.ai_video_model_path:
-            env["AI_VIDEO_MODEL_PATH"] = settings.ai_video_model_path
-
-        full_cmd = [*command, video_path]
-        logger.info(f"[MODEL COMMAND] {' '.join(full_cmd)}")
+    def analyze_video(
+        video_path: str,
+        questionnaire_score: Optional[int] = None,
+        questionnaire_max: Optional[int] = None,
+        child_info: Optional[dict] = None,
+    ) -> dict:
+        from app.services.ai.pipeline import BehavioralAnalysisPipeline
+        from app.services.ai.preprocessing.video_preprocessor import VideoPreprocessingError
+        from app.services.ai.pbr4ai.provider import PBR4AIProviderError
 
         try:
-            completed = subprocess.run(
-                full_cmd,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                env=env,
+            return BehavioralAnalysisPipeline.analyze_video(
+                video_path=video_path,
+                questionnaire_score=questionnaire_score,
+                questionnaire_max=questionnaire_max,
+                child_info=child_info,
             )
-        except OSError as exc:
-            raise ModelConfigurationError(f"Unable to execute configured video model command: {exc}") from exc
-        except subprocess.TimeoutExpired as exc:
-            raise ModelInferenceError("Video model inference timed out.") from exc
-
-        logger.info(f"[MODEL EXIT CODE] {completed.returncode}")
-        print(f"MODEL EXIT CODE: {completed.returncode}")
-        logger.info(f"[MODEL STDOUT] {completed.stdout.strip()}")
-        print(f"MODEL STDOUT: {completed.stdout.strip()}")
-        if completed.stderr:
-            logger.info(f"[MODEL STDERR] {completed.stderr.strip()}")
-
-        if completed.returncode != 0:
-            detail = completed.stderr.strip() or completed.stdout.strip() or "Model command failed without output."
-            raise ModelInferenceError(detail)
-
-        stdout_text = completed.stdout.strip()
-        json_start = stdout_text.find("{")
-        json_end = stdout_text.rfind("}") + 1
-        if json_start != -1 and json_end > json_start:
-            json_str = stdout_text[json_start:json_end]
-        else:
-            json_str = stdout_text
-
-        try:
-            payload = json.loads(json_str)
-        except json.JSONDecodeError as exc:
-            raise ModelInferenceError(f"Video model command must return valid JSON on stdout. Received: {stdout_text[:300]}") from exc
-
-        logger.info(f"[RAW MODEL RESULT] {json_str}")
-        logger.info(f"[PARSED RESULT] {payload}")
-        print(f"PARSED RESULT: {payload}")
-
-        required = {"support_indicator", "confidence_score", "percentage", "summary", "recommendations"}
-        missing = sorted(required - payload.keys())
-        if missing:
-            raise ModelInferenceError(f"Video model JSON is missing required fields: {', '.join(missing)}")
-
-        payload.setdefault(
-            "disclaimer",
-            "This video analysis is a screening/support result only and does not constitute a medical diagnosis of autism spectrum disorder.",
-        )
-        return payload
+        except VideoPreprocessingError as exc:
+            raise ModelConfigurationError(str(exc)) from exc
+        except PBR4AIProviderError as exc:
+            raise ModelInferenceError(str(exc)) from exc
+        except Exception as exc:
+            logger.error(f"[PREDICTION SERVICE ERROR] {exc}")
+            raise ModelInferenceError(f"Video analysis pipeline failed: {exc}") from exc

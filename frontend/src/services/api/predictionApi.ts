@@ -8,6 +8,23 @@ export interface DomainBreakdownItem {
   description: string;
 }
 
+export interface ModelStatusItem {
+  model_name?: string;
+  status: string;
+  reason?: string;
+  top_action?: string;
+  action_confidence?: number;
+  smm_detected?: boolean;
+  smm_confidence?: number;
+}
+
+export interface TherapistRecommendationItem {
+  specialization: string;
+  rationale: string;
+  suggested_focus?: string[];
+  priority?: string;
+}
+
 export interface PredictionResult {
   id?: string;
   childId: string;
@@ -19,6 +36,11 @@ export interface PredictionResult {
   disclaimer: string;
   source?: string;
   domainBreakdown?: Record<string, DomainBreakdownItem>;
+  models?: Record<string, ModelStatusItem>;
+  therapistRecommendations?: TherapistRecommendationItem[];
+  videoMetadata?: Record<string, any>;
+  rawModelMetrics?: Record<string, any>;
+  videoAnalysis?: Record<string, any>;
   createdAt?: string;
 }
 
@@ -33,6 +55,11 @@ interface BackendPredictionResponse {
   disclaimer: string;
   source?: string;
   domain_breakdown?: Record<string, DomainBreakdownItem>;
+  models?: Record<string, ModelStatusItem>;
+  therapist_recommendations?: TherapistRecommendationItem[];
+  video_metadata?: Record<string, any>;
+  raw_model_metrics?: Record<string, any>;
+  video_analysis?: Record<string, any>;
   created_at?: string | null;
 }
 
@@ -47,6 +74,11 @@ const toPredictionResult = (result: BackendPredictionResponse): PredictionResult
   disclaimer: result.disclaimer,
   source: result.source,
   domainBreakdown: result.domain_breakdown,
+  models: result.models,
+  therapistRecommendations: result.therapist_recommendations,
+  videoMetadata: result.video_metadata,
+  rawModelMetrics: result.raw_model_metrics,
+  videoAnalysis: result.video_analysis,
   createdAt: result.created_at ?? undefined
 });
 

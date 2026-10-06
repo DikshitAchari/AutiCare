@@ -134,6 +134,13 @@ class PredictionResponse(BaseModel):
     disclaimer: str
     source: str = "questionnaire"
     domain_breakdown: Optional[Dict[str, Any]] = None
+    models: Optional[Dict[str, Any]] = None
+    therapist_recommendations: Optional[List[Dict[str, Any]]] = None
+    video_metadata: Optional[Dict[str, Any]] = None
+    raw_model_metrics: Optional[Dict[str, Any]] = None
+    normalized_features: Optional[Dict[str, Any]] = None
+    video_analysis: Optional[Dict[str, Any]] = None
+    timing: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
 
 
