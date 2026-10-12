@@ -2,92 +2,55 @@ from __future__ import annotations
 
 import json
 import uuid
-from http import HTTPStatus
-from typing import Any, Dict, List, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
+from app.database.connection import SessionLocal
 from app.main import app
+from app.models.user import User
 
-EXCLUDED_PATHS = {
-    "/docs",
-    "/redoc",
-    "/openapi.json",
-    "/docs/oauth2-redirect",
-    "/favicon.ico",
-}
-
-METHOD_PRIORITY = {
-    "GET": 0,
-    "POST": 1,
-    "PUT": 2,
-    "PATCH": 3,
-    "DELETE": 4,
-}
+TEST_EMAIL: Optional[str] = None
+TEST_PASSWORD = "Password@123"
+RESET_PASSWORD = "NewPassword@123"
+ACCESS_TOKEN: Optional[str] = None
+USER_ID: Optional[int] = None
+CHILD_ID: Optional[int] = None
+ASSESSMENT_ID: Optional[int] = None
+PREDICTION_ID: Optional[int] = None
 
 RESULTS: List[Dict[str, Any]] = []
 FAILED: List[Dict[str, Any]] = []
+BLOCKED: List[Dict[str, Any]] = []
 SKIPPED: List[Dict[str, Any]] = []
 
-TEST_TOKEN: str | None = None
-TEST_CHILD_ID: int | None = None
-TEST_EMAIL: str | None = None
-TEST_PASSWORD: str = "Password@123"
+
+def mask_sensitive(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: Dict[str, Any] = {}
+        for key, item in value.items():
+            key_lower = str(key).lower()
+            if key_lower == "input" or any(
+                token in key_lower
+                for token in ["token", "password", "secret", "otp", "key", "authorization", "cookie", "credential"]
+            ):
+                cleaned[key] = "<redacted>"
+            else:
+                cleaned[key] = mask_sensitive(item)
+        return cleaned
+    if isinstance(value, list):
+        return [mask_sensitive(item) for item in value]
+    return value
 
 
-def discover_routes() -> List[Tuple[str, str]]:
-    discovered: List[Tuple[str, str]] = []
-    for route in app.routes:
-        methods = getattr(route, "methods", None)
-        if not methods:
-            continue
-        path = getattr(route, "path", None)
-        if not path or path in EXCLUDED_PATHS:
-            continue
-        for method in sorted(methods, key=lambda m: METHOD_PRIORITY.get(m, 99)):
-            if method in {"HEAD", "OPTIONS"}:
-                continue
-            discovered.append((method, path))
-
-    preferred_order = [
-        ("GET", "/health"),
-        ("POST", "/api/auth/register"),
-        ("POST", "/api/auth/login"),
-        ("GET", "/api/auth/me"),
-        ("GET", "/api/users/me"),
-        ("POST", "/api/children"),
-        ("GET", "/api/children"),
-        ("POST", "/api/assessment"),
-        ("GET", "/api/assessment"),
-        ("POST", "/api/prediction"),
-    ]
-
-    ordered = []
-    seen = set()
-    for item in preferred_order:
-        if item in discovered:
-            ordered.append(item)
-            seen.add(item)
-
-    for item in discovered:
-        if item not in seen:
-            ordered.append(item)
-    return ordered
-
-
-def status_text(code: int) -> str:
-    try:
-        return f"{code} {HTTPStatus(code).phrase}"
-    except ValueError:
-        return str(code)
-
-
-def response_detail(resp) -> str:
+def safe_response_detail(resp) -> str:
     try:
         payload = resp.json()
     except Exception:
         payload = resp.text
-
+    payload = mask_sensitive(payload)
     if isinstance(payload, dict):
         if "detail" in payload:
             detail = payload["detail"]
@@ -96,319 +59,413 @@ def response_detail(resp) -> str:
             return str(detail)
         if "message" in payload:
             return str(payload["message"])
-        return json.dumps(payload, ensure_ascii=False)[:200]
+        return json.dumps(payload, ensure_ascii=False)[:300]
     if isinstance(payload, list):
-        return json.dumps(payload, ensure_ascii=False)[:200]
+        return json.dumps(payload, ensure_ascii=False)[:300]
     if payload is None:
         return "No response body"
-    return str(payload)[:200]
+    return str(payload)[:300]
 
 
-def log_result(method: str, path: str, status_code: int, response_text: str = "") -> None:
-    status = status_text(status_code)
-    if status_code in {200, 201, 202, 204}:
-        print(f"[PASS] {method} {path}")
-        print(f"Status: {status}")
-        if response_text:
-            print(f"Response: {response_text}")
-        print()
-        RESULTS.append({"method": method, "path": path, "status": status_code, "response": response_text})
-    else:
-        print(f"[FAIL] {method} {path}")
-        print(f"Status: {status}")
-        print(f"Response: {response_text}")
-        print()
-        RESULTS.append({"method": method, "path": path, "status": status_code, "response": response_text})
-        FAILED.append({"method": method, "path": path, "status": status_code, "reason": response_text})
-
-
-def log_skip(method: str, path: str, reason: str) -> None:
-    print(f"[SKIP] {method} {path}")
-    print(f"Reason: {reason}")
-    print()
-    SKIPPED.append({"method": method, "path": path, "reason": reason})
-
-
-def make_headers(token: str | None = None) -> Dict[str, str]:
+def make_headers(token: Optional[str] = None) -> Dict[str, str]:
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
-def build_test_user_email() -> str:
-    return f"test_user_{uuid.uuid4().hex[:12]}@example.com"
+def mask_token(token: Optional[str]) -> str:
+    if not token:
+        return "<none>"
+    return "<redacted>"
 
 
-def try_register_user(client: TestClient) -> str | None:
-    global TEST_EMAIL, TEST_PASSWORD
-    if TEST_EMAIL is None:
-        TEST_EMAIL = build_test_user_email()
+def record_result(name: str, status: str, reason: str = "") -> None:
+    existing = next((item for item in RESULTS if item["name"] == name), None)
+    if existing:
+        existing["status"] = status
+        existing["reason"] = reason
+    else:
+        RESULTS.append({"name": name, "status": status, "reason": reason})
 
-    payload = {
-        "email": TEST_EMAIL,
-        "password": TEST_PASSWORD,
-        "name": "API Test User",
-        "role": "PARENT",
-        "phone": "+15550000001",
+    if status == "FAIL":
+        if not any(item["name"] == name for item in FAILED):
+            FAILED.append({"name": name, "reason": reason})
+    elif status == "BLOCKED":
+        if not any(item["name"] == name for item in BLOCKED):
+            BLOCKED.append({"name": name, "reason": reason})
+    elif status == "SKIPPED":
+        if not any(item["name"] == name for item in SKIPPED):
+            SKIPPED.append({"name": name, "reason": reason})
+
+    print(f"[{status.upper()}] {name}{f' — {reason}' if reason else ''}")
+
+
+def unique_email(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:10]}@example.com"
+
+
+def get_database_otp(email: str) -> Optional[str]:
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email.lower()).first()
+        return getattr(user, "otp", None)
+    finally:
+        db.close()
+
+
+def child_payload() -> Dict[str, Any]:
+    return {
+        "name": "Test Child Alpha",
+        "dob": "2021-05-15",
+        "gender": "Male",
+        "school": "AutiCare Demo Academy",
+        "grade": "Kindergarten",
+        "parent_notes": "Test child record for API validation.",
     }
-    resp = client.post("/api/auth/register", json=payload)
-    body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-    if resp.status_code in {200, 201}:
-        token = body.get("access_token")
-        if token:
-            return token
-        return None
-    return None
 
 
-def try_login_user(client: TestClient) -> str | None:
-    global TEST_EMAIL, TEST_PASSWORD
-    if TEST_EMAIL is None:
-        TEST_EMAIL = build_test_user_email()
+def assessment_answers() -> Dict[str, int]:
+    return {"Q1": 0, "Q2": 1, "Q3": 0, "Q4": 2, "Q5": 1, "Q6": 0, "Q7": 2, "Q8": 1}
 
-    payload = {
-        "email": TEST_EMAIL,
-        "password": TEST_PASSWORD,
-        "role": "PARENT",
-    }
-    resp = client.post("/api/auth/login", json=payload)
-    body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-    if resp.status_code == 200:
-        token = body.get("access_token")
-        if token:
-            return token
-    return None
+
+def prediction_answers() -> Dict[str, int]:
+    return {"Q1": 0, "Q2": 1, "Q3": 0, "Q4": 2, "Q5": 1, "Q6": 0, "Q7": 2, "Q8": 1}
 
 
 def run_tests() -> None:
-    global TEST_EMAIL, TEST_PASSWORD, TEST_TOKEN, TEST_CHILD_ID
+    global TEST_EMAIL, ACCESS_TOKEN, USER_ID, CHILD_ID, ASSESSMENT_ID, PREDICTION_ID
     client = TestClient(app)
-    routes = discover_routes()
 
-    if TEST_EMAIL is None:
-        TEST_EMAIL = build_test_user_email()
+    # Health
+    health = client.get("/health")
+    if health.status_code == 200:
+        record_result("Health", "PASS")
+    else:
+        record_result("Health", "FAIL", safe_response_detail(health))
 
-    # Public endpoints and auth flow
-    for method, path in routes:
-        if method == "DELETE":
-            log_skip(method, path, "Destructive endpoint - skipped for safety")
-            continue
+    # Registration
+    email = unique_email("register")
+    TEST_EMAIL = email
+    reg = client.post(
+        "/api/auth/register",
+        json={
+            "email": email,
+            "password": TEST_PASSWORD,
+            "name": "API Registration Test",
+            "role": "PARENT",
+            "phone": "+15550000003",
+        },
+    )
+    if reg.status_code in {200, 201}:
+        data = reg.json()
+        ACCESS_TOKEN = data.get("access_token")
+        USER_ID = data.get("user", {}).get("id")
+        record_result(
+            "Registration",
+            "PASS",
+            f"user_id={USER_ID} token={mask_token(ACCESS_TOKEN)}",
+        )
+    else:
+        record_result("Registration", "FAIL", safe_response_detail(reg))
 
-        if path == "/health":
-            resp = client.get(path)
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
-
-        if path in {"/api/auth/register"}:
-            resp = client.post(path, json={
-                "email": TEST_EMAIL or build_test_user_email(),
-                "password": TEST_PASSWORD,
-                "name": "API Test User",
-                "role": "PARENT",
-                "phone": "+15550000001",
-            })
-            if resp.status_code in {200, 201}:
-                body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                TEST_TOKEN = body.get("access_token")
-                TEST_EMAIL = body.get("user", {}).get("email") or TEST_EMAIL or build_test_user_email()
-                log_result(method, path, resp.status_code, response_detail(resp))
-            else:
-                log_result(method, path, resp.status_code, response_detail(resp))
-            continue
-
-        if path == "/api/auth/login":
-            if TEST_EMAIL is None:
-                TEST_EMAIL = build_test_user_email()
-            resp = client.post(path, json={
+    # Login
+    if ACCESS_TOKEN:
+        login = client.post(
+            "/api/auth/login",
+            json={
                 "email": TEST_EMAIL,
                 "password": TEST_PASSWORD,
                 "role": "PARENT",
-            })
-            if resp.status_code == 200:
-                body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                TEST_TOKEN = body.get("access_token")
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+            },
+        )
+        if login.status_code == 200:
+            data = login.json()
+            ACCESS_TOKEN = data.get("access_token")
+            record_result(
+                "Login",
+                "PASS",
+                f"token={mask_token(ACCESS_TOKEN)} user={data.get('user', {}).get('email')}",
+            )
+        else:
+            record_result("Login", "FAIL", safe_response_detail(login))
+    else:
+        record_result("Login", "BLOCKED", "Registration did not return a valid access token.")
 
-        if path in {"/api/auth/me", "/api/users/me"}:
-            if not TEST_TOKEN:
-                log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-                continue
-            resp = client.request(method, path, headers=make_headers(TEST_TOKEN))
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+    # Current User
+    if ACCESS_TOKEN:
+        me = client.get("/api/auth/me", headers=make_headers(ACCESS_TOKEN))
+        if me.status_code == 200:
+            me_data = me.json()
+            USER_ID = me_data.get("id")
+            record_result("Current User", "PASS", f"user_id={USER_ID} email={me_data.get('email')}")
+        else:
+            record_result("Current User", "FAIL", safe_response_detail(me))
+    else:
+        record_result("Current User", "BLOCKED", "No access token available.")
 
-        if path == "/api/children" and method == "POST":
-            if not TEST_TOKEN:
-                log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-                continue
-            payload = {
-                "name": "Test Child",
-                "dob": "2021-06-15",
-                "gender": "Male",
-                "school": "AutiCare Test Academy",
-                "grade": "Kindergarten",
-                "parent_notes": "Safe test child record created by automated API test runner",
-            }
-            resp = client.post(path, json=payload, headers=make_headers(TEST_TOKEN))
-            if resp.status_code in {200, 201}:
-                body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                TEST_CHILD_ID = body.get("id")
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+    # Child creation and retrieval
+    if ACCESS_TOKEN:
+        child_resp = client.post("/api/children", json=child_payload(), headers=make_headers(ACCESS_TOKEN))
+        if child_resp.status_code == 201:
+            child_data = child_resp.json()
+            CHILD_ID = child_data.get("id")
+            record_result("Child Creation", "PASS", f"child_id={CHILD_ID}")
 
-        if path == "/api/children" and method == "GET":
-            if not TEST_TOKEN:
-                log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-                continue
-            resp = client.get(path, headers=make_headers(TEST_TOKEN))
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+            list_resp = client.get("/api/children", headers=make_headers(ACCESS_TOKEN))
+            if list_resp.status_code == 200:
+                list_data = list_resp.json()
+                if any(str(item.get("id")) == str(CHILD_ID) for item in list_data):
+                    record_result("Child Retrieval", "PASS", f"retrieved_child_id={CHILD_ID}")
+                else:
+                    record_result("Child Retrieval", "FAIL", "Created child not returned in children list")
+            else:
+                record_result("Child Retrieval", "FAIL", safe_response_detail(list_resp))
+        else:
+            record_result("Child Creation", "FAIL", safe_response_detail(child_resp))
+            record_result("Child Retrieval", "BLOCKED", "Child creation did not succeed.")
+    else:
+        record_result("Child Creation", "BLOCKED", "No access token available.")
+        record_result("Child Retrieval", "BLOCKED", "No access token available.")
 
-        if path == "/api/assessment" and method == "POST":
-            if not TEST_TOKEN:
-                log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-                continue
-            if TEST_CHILD_ID is None:
-                log_skip(method, path, "Resource dependency not available: child profile not created safely")
-                continue
-            payload = {
-                "child_id": TEST_CHILD_ID,
-                "answers": {
-                    "Q1": 0,
-                    "Q2": 1,
-                    "Q3": 0,
-                    "Q4": 2,
-                    "Q5": 1,
-                    "Q6": 0,
-                    "Q7": 2,
-                    "Q8": 1,
-                },
-            }
-            resp = client.post(path, json=payload, headers=make_headers(TEST_TOKEN))
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+    # Assessment creation and retrieval
+    if ACCESS_TOKEN and CHILD_ID:
+        assessment_resp = client.post(
+            "/api/assessment",
+            json={"child_id": CHILD_ID, "answers": assessment_answers()},
+            headers=make_headers(ACCESS_TOKEN),
+        )
+        if assessment_resp.status_code == 201:
+            assessment_data = assessment_resp.json()
+            ASSESSMENT_ID = assessment_data.get("id")
+            record_result("Assessment Creation", "PASS", f"assessment_id={ASSESSMENT_ID}")
 
-        if path == "/api/assessment" and method == "GET":
-            if not TEST_TOKEN:
-                log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-                continue
-            resp = client.get(path, headers=make_headers(TEST_TOKEN))
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+            assessment_list = client.get("/api/assessment", headers=make_headers(ACCESS_TOKEN))
+            if assessment_list.status_code == 200:
+                items = assessment_list.json()
+                if any(str(item.get("id")) == str(ASSESSMENT_ID) for item in items):
+                    record_result("Assessment Retrieval", "PASS", f"assessment_id={ASSESSMENT_ID}")
+                else:
+                    record_result("Assessment Retrieval", "FAIL", "Created assessment not returned in list")
+            else:
+                record_result("Assessment Retrieval", "FAIL", safe_response_detail(assessment_list))
+        else:
+            record_result("Assessment Creation", "FAIL", safe_response_detail(assessment_resp))
+            record_result("Assessment Retrieval", "BLOCKED", "Assessment creation failed.")
+    else:
+        record_result("Assessment Creation", "BLOCKED", "No usable child profile is available.")
+        record_result("Assessment Retrieval", "BLOCKED", "No usable child profile is available.")
 
-        if path == "/api/prediction" and method == "POST":
-            if not TEST_TOKEN:
-                log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-                continue
-            if TEST_CHILD_ID is None:
-                log_skip(method, path, "Resource dependency not available: child profile not created safely")
-                continue
-            payload = {
-                "child_id": TEST_CHILD_ID,
-                "answers": {
-                    "Q1": 0,
-                    "Q2": 1,
-                    "Q3": 0,
-                    "Q4": 2,
-                    "Q5": 1,
-                    "Q6": 0,
-                    "Q7": 2,
-                    "Q8": 1,
-                },
-            }
-            resp = client.post(path, json=payload, headers=make_headers(TEST_TOKEN))
-            log_result(method, path, resp.status_code, response_detail(resp))
-            continue
+    # Prediction creation and retrieval by ID
+    if ACCESS_TOKEN and CHILD_ID:
+        pred_resp = client.post(
+            "/api/prediction",
+            json={"child_id": CHILD_ID, "answers": prediction_answers()},
+            headers=make_headers(ACCESS_TOKEN),
+        )
+        if pred_resp.status_code == 201:
+            pred_data = pred_resp.json()
+            PREDICTION_ID = pred_data.get("id")
+            record_result("Prediction Creation", "PASS", f"prediction_id={PREDICTION_ID}")
+            if PREDICTION_ID is not None:
+                get_pred = client.get(
+                    f"/api/prediction/results/{PREDICTION_ID}",
+                    headers=make_headers(ACCESS_TOKEN),
+                )
+                if get_pred.status_code == 200:
+                    get_pred_data = get_pred.json()
+                    if str(get_pred_data.get("id")) == str(PREDICTION_ID):
+                        record_result("Prediction Retrieval By ID", "PASS", f"prediction_id={PREDICTION_ID}")
+                    else:
+                        record_result("Prediction Retrieval By ID", "FAIL", "Prediction ID mismatch in fetch result")
+                else:
+                    record_result("Prediction Retrieval By ID", "FAIL", safe_response_detail(get_pred))
+            else:
+                record_result("Prediction Retrieval By ID", "FAIL", "Prediction creation response did not include an ID")
+        else:
+            record_result("Prediction Creation", "FAIL", safe_response_detail(pred_resp))
+            record_result("Prediction Retrieval By ID", "BLOCKED", "Prediction creation failed.")
+    else:
+        record_result("Prediction Creation", "BLOCKED", "No valid child profile available.")
+        record_result("Prediction Retrieval By ID", "BLOCKED", "No valid prediction ID available.")
 
-        # Catch-all for any other actual route types.
-        if not TEST_TOKEN and path not in {"/health"}:
-            log_skip(method, path, "Authentication-dependent endpoint - no safe test credentials available")
-            continue
+    # Forgot Password / OTP verification / Password reset
+    reset_email = unique_email("reset")
+    reset_user = client.post(
+        "/api/auth/register",
+        json={
+            "email": reset_email,
+            "password": TEST_PASSWORD,
+            "name": "Reset Password Test",
+            "role": "PARENT",
+            "phone": "+15550000004",
+        },
+    )
+    if reset_user.status_code in {200, 201}:
+        forgot = client.post("/api/auth/forgot-password", json={"email": reset_email})
+        if forgot.status_code == 200:
+            otp = get_database_otp(reset_email)
+            if otp:
+                record_result("Forgot Password", "PASS", "OTP generated and stored for the registered user")
+                verify = client.post("/api/auth/verify-reset-otp", json={"email": reset_email, "otp": otp})
+                if verify.status_code == 200:
+                    record_result("OTP Verification", "PASS", "OTP verified successfully")
+                    reset_resp = client.post(
+                        "/api/auth/reset-password",
+                        json={
+                            "email": reset_email,
+                            "new_password": RESET_PASSWORD,
+                            "confirm_password": RESET_PASSWORD,
+                        },
+                    )
+                    if reset_resp.status_code == 200:
+                        login_after_reset = client.post(
+                            "/api/auth/login",
+                            json={"email": reset_email, "password": RESET_PASSWORD, "role": "PARENT"},
+                        )
+                        if login_after_reset.status_code == 200:
+                            record_result("Password Reset", "PASS", "Password reset completed successfully and post-reset login succeeded")
+                        else:
+                            record_result("Password Reset", "FAIL", safe_response_detail(login_after_reset))
+                    else:
+                        record_result("Password Reset", "FAIL", safe_response_detail(reset_resp))
+                else:
+                    record_result("OTP Verification", "FAIL", safe_response_detail(verify))
+            else:
+                record_result("Forgot Password", "BLOCKED", "OTP was not generated in the database; email/OTP infrastructure prevented automated verification.")
+                record_result("OTP Verification", "BLOCKED", "No OTP generated for automated verification.")
+                record_result("Password Reset", "BLOCKED", "OTP verification could not be completed.")
+        else:
+            record_result("Forgot Password", "FAIL", safe_response_detail(forgot))
+            record_result("OTP Verification", "BLOCKED", "Forgot-password endpoint did not succeed; OTP verification is unavailable.")
+            record_result("Password Reset", "BLOCKED", "Forgot-password endpoint did not succeed; password reset cannot be validated.")
+    else:
+        record_result("Forgot Password", "BLOCKED", "Could not create the reset test user to exercise the real OTP flow.")
+        record_result("OTP Verification", "BLOCKED", "No reset user existed for valid OTP verification.")
+        record_result("Password Reset", "BLOCKED", "No reset user existed to validate the flow.")
 
-        resp = client.request(method, path, headers=make_headers(TEST_TOKEN))
-        log_result(method, path, resp.status_code, response_detail(resp))
+    # Real Video/AI analyze
+    repository_root = Path(__file__).resolve().parents[1]
+    video_file = next(
+        (
+            candidate
+            for extension in ("mp4", "avi", "mov")
+            for candidate in repository_root.rglob(f"*.{extension}")
+            if candidate.is_file()
+        ),
+        None,
+    )
+    if not ACCESS_TOKEN or not CHILD_ID:
+        record_result("Real Video/AI Analyze", "BLOCKED", "No valid authenticated child profile was available for video analysis.")
+    else:
+        settings = get_settings()
+        blockers = []
+        if not settings.ai_video_model_command:
+            blockers.append("AI_VIDEO_MODEL_COMMAND is not configured")
+        if settings.ai_video_model_path and not Path(settings.ai_video_model_path).is_file():
+            blockers.append("configured AI_VIDEO_MODEL_PATH does not exist")
+        elif settings.ai_video_model_path and Path(settings.ai_video_model_path).stat().st_size == 0:
+            blockers.append("configured AI model file is empty")
+        if video_file is None:
+            blockers.append("no valid MP4, AVI, or MOV test video exists in the repository")
 
+        if blockers:
+            record_result("Real Video/AI Analyze", "BLOCKED", "; ".join(blockers) + ".")
+        else:
+            mime_type = {
+                ".mp4": "video/mp4",
+                ".avi": "video/x-msvideo",
+                ".mov": "video/quicktime",
+            }[video_file.suffix.lower()]
+            with open(video_file, "rb") as fh:
+                payload = fh.read()
+            files = {"file": (video_file.name, payload, mime_type)}
+            resp = client.post(
+                "/api/prediction/analyze",
+                data={"child_id": str(CHILD_ID)},
+                files=files,
+                headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
+            )
+            if resp.status_code == 201:
+                record_result("Real Video/AI Analyze", "PASS", f"prediction_id={resp.json().get('id')}")
+            else:
+                record_result("Real Video/AI Analyze", "FAIL", safe_response_detail(resp))
 
-def print_summary() -> None:
+    # Chat
+    if ACCESS_TOKEN:
+        chat_request = {"message": "I am looking for a few simple sensory-friendly home activities for a child with autism."}
+        chat_response = client.post("/api/chat", json=chat_request, headers=make_headers(ACCESS_TOKEN))
+        if chat_response.status_code == 201:
+            response_data = chat_response.json()
+            record_result("Chat", "PASS", f"response_length={len(response_data.get('response', ''))}")
+        else:
+            record_result("Chat", "FAIL", safe_response_detail(chat_response))
+
+        history_response = client.get("/api/chat/history", headers=make_headers(ACCESS_TOKEN))
+        if history_response.status_code == 200:
+            history_data = history_response.json()
+            if isinstance(history_data, list) and len(history_data) >= 1:
+                record_result("Chat History", "PASS", f"messages={len(history_data)}")
+            else:
+                record_result("Chat History", "FAIL", "Chat history did not return any messages")
+        else:
+            record_result("Chat History", "FAIL", safe_response_detail(history_response))
+    else:
+        record_result("Chat", "BLOCKED", "No access token available.")
+        record_result("Chat History", "BLOCKED", "No access token available.")
+
+    print("\n========================================")
+    print("AUTICARE API TEST SUMMARY")
+    print("========================================")
+    passed = sum(1 for item in RESULTS if item["status"] == "PASS")
+    failed = sum(1 for item in RESULTS if item["status"] == "FAIL")
+    blocked = sum(1 for item in RESULTS if item["status"] == "BLOCKED")
+    skipped = sum(1 for item in RESULTS if item["status"] == "SKIPPED")
     total = len(RESULTS)
-    passed = sum(1 for r in RESULTS if r["status"] in {200, 201, 202, 204})
-    failed = sum(1 for r in RESULTS if r["status"] not in {200, 201, 202, 204})
-    skipped = len(SKIPPED)
-
-    code_counts = {
-        200: 0,
-        201: 0,
-        202: 0,
-        204: 0,
-        400: 0,
-        401: 0,
-        403: 0,
-        404: 0,
-        422: 0,
-        500: 0,
-    }
-    for item in RESULTS:
-        if item["status"] in code_counts:
-            code_counts[item["status"]] += 1
-
-    print("========================================")
-    print("       AUTICARE API TEST SUMMARY")
-    print("========================================")
-    print(f"Total Tested: {total}")
+    print(f"Total: {total}")
     print(f"Passed: {passed}")
     print(f"Failed: {failed}")
+    print(f"Blocked: {blocked}")
     print(f"Skipped: {skipped}")
     print()
-    print(f"200 OK: {code_counts[200]}")
-    print(f"201 Created: {code_counts[201]}")
-    print(f"202 Accepted: {code_counts[202]}")
-    print(f"204 No Content: {code_counts[204]}")
-    print()
-    print("Other Status Codes:")
-    print(f"400 Bad Request: {code_counts[400]}")
-    print(f"401 Unauthorized: {code_counts[401]}")
-    print(f"403 Forbidden: {code_counts[403]}")
-    print(f"404 Not Found: {code_counts[404]}")
-    print(f"422 Validation Error: {code_counts[422]}")
-    print(f"500 Internal Server Error: {code_counts[500]}")
-    print()
-    print("========================================")
-    print("FAILED APIs")
-    print("========================================")
+
+    required_names = [
+        "Health",
+        "Registration",
+        "Login",
+        "Current User",
+        "Child Creation",
+        "Child Retrieval",
+        "Assessment Creation",
+        "Assessment Retrieval",
+        "Prediction Creation",
+        "Prediction Retrieval By ID",
+        "Forgot Password",
+        "OTP Verification",
+        "Password Reset",
+        "Real Video/AI Analyze",
+        "Chat",
+        "Chat History",
+    ]
+
+    for name in required_names:
+        match = next((item for item in RESULTS if item["name"] == name), None)
+        if match is None:
+            record_result(name, "SKIPPED", "Test not run in this session")
+            continue
+        status = match["status"].upper()
+        reason = match["reason"]
+        print(f"[{status}] {name}{f' — {reason}' if reason else ''}")
+
     if FAILED:
+        print("\nFAILED REASONS")
         for item in FAILED:
-            print(f"{item['method']} {item['path']}")
-            print(f"Status: {status_text(item['status'])}")
-            print(f"Reason: {item['reason']}")
-            print()
-    else:
-        print("None")
-    print()
-    print("========================================")
-    print("SKIPPED APIs")
-    print("========================================")
-    if SKIPPED:
-        for item in SKIPPED:
-            print(f"{item['method']} {item['path']}")
-            print(f"Reason: {item['reason']}")
-            print()
-    else:
-        print("None")
-    print("========================================")
-
-
-def main() -> None:
-    routes = discover_routes()
-    print("Discovered routes:")
-    for method, path in routes:
-        print(f"- {method} {path}")
-    print(f"Total discovered routes: {len(routes)}")
-    print()
-    run_tests()
-    print_summary()
+            print(f"- {item['name']}: {item['reason']}")
+    if BLOCKED:
+        print("\nBLOCKED REASONS")
+        for item in BLOCKED:
+            print(f"- {item['name']}: {item['reason']}")
 
 
 if __name__ == "__main__":
-    main()
+    run_tests()

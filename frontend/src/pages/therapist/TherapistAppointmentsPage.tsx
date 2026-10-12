@@ -43,7 +43,7 @@ export const TherapistAppointmentsPage: React.FC = () => {
               { id: 'table', label: 'Table', icon: <List className="w-3.5 h-3.5" /> }
             ]}
             activeTab={viewMode}
-            onChange={(id) => setViewMode(id as any)}
+            onChange={(id) => setViewMode(id as 'cards' | 'table')}
             variant="pills"
           />
         </div>

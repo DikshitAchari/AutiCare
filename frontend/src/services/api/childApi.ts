@@ -35,8 +35,10 @@ const toChild = (child: BackendChild): Child => ({
 });
 
 export const childApi = {
-  getChildrenByParent: async (_parentId: string): Promise<Child[]> =>
-    request<BackendChild[]>('/api/children').then((children) => children.map(toChild)),
+  getChildrenByParent: async (parentId: string): Promise<Child[]> => {
+    void parentId;
+    return request<BackendChild[]>('/api/children').then((children) => children.map(toChild));
+  },
 
   getChildById: async (id: string): Promise<Child | null> => {
     const children = await request<BackendChild[]>('/api/children');
@@ -46,7 +48,9 @@ export const childApi = {
   getAllChildren: async (): Promise<Child[]> =>
     request<BackendChild[]>('/api/children').then((children) => children.map(toChild)),
 
-  addChild: async (intake: ChildIntakeForm, _parentId?: string, _parentName?: string): Promise<Child> => {
+  addChild: async (intake: ChildIntakeForm, parentId?: string, parentName?: string): Promise<Child> => {
+    void parentId;
+    void parentName;
     const child = await request<BackendChild>('/api/children', {
       method: 'POST',
       body: JSON.stringify({

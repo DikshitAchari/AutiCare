@@ -43,15 +43,9 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    if (role === 'PARENT') {
-      if (!childName.trim()) {
-        showToast('Child name is required', 'error');
-        return;
-      }
-      if (!childDob) {
-        showToast('Child date of birth is required', 'error');
-        return;
-      }
+    if (role === 'PARENT' && childName.trim() && !childDob) {
+      showToast('Child date of birth is required when creating a child profile', 'error');
+      return;
     }
 
     setIsLoading(true);
@@ -63,7 +57,7 @@ export const RegisterPage: React.FC = () => {
         role,
         phone: phone.trim() || undefined,
         child:
-          role === 'PARENT'
+          role === 'PARENT' && childName.trim()
             ? {
                 name: childName.trim(),
                 dob: childDob,
@@ -192,25 +186,23 @@ export const RegisterPage: React.FC = () => {
 
                 <Input
                   type="text"
-                  placeholder="Child Full Name *"
+                  placeholder="Child Full Name (optional)"
                   leftIcon={<Baby className="w-4 h-4 text-purple-500" />}
                   value={childName}
                   onChange={(event) => setChildName(event.target.value)}
-                  required
                   minLength={2}
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                      Date of Birth *
+                      Date of Birth (optional if created later)
                     </label>
                     <div className="relative">
                       <input
                         type="date"
                         value={childDob}
                         onChange={(event) => setChildDob(event.target.value)}
-                        required
                         className="block w-full rounded-xl border border-slate-300 bg-white text-slate-900 text-sm py-2 px-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                     </div>

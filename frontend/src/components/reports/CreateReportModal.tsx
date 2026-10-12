@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -33,11 +33,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
   const [overallScore, setOverallScore] = useState(80);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (childrenList.length > 0 && (!childId || !childrenList.some((c) => c.id === childId))) {
-      setChildId(childrenList[0].id);
-    }
-  }, [childrenList, childId, isOpen]);
+  const effectiveChildId = childrenList.some((c) => c.id === childId) ? childId : childrenList[0]?.id || '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +42,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
       return;
     }
 
-    const selectedChild = childrenList.find((c) => c.id === childId) || childrenList[0];
+    const selectedChild = childrenList.find((c) => c.id === effectiveChildId) || childrenList[0];
     if (!selectedChild || !user) {
       showToast('Please select a valid child patient', 'error');
       return;
@@ -70,8 +66,9 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
       showToast(`Clinical Therapy Report generated for ${selectedChild.name}!`, 'success');
       onSuccess();
       onClose();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to create report', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create report';
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -82,7 +79,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
       <form onSubmit={handleSubmit} className="space-y-4">
         <Select
           label="Select Patient Child"
-          value={childId}
+          value={effectiveChildId}
           onChange={(e) => setChildId(e.target.value)}
           options={childrenList.map((c) => ({ label: c.name, value: c.id }))}
         />

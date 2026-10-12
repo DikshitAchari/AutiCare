@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { Appointment, BookingSource, AppointmentType } from '../types/appointment';
 import { appointmentApi } from '../services/mockApi/appointmentApi';

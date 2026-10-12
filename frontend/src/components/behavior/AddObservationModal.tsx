@@ -23,11 +23,14 @@ export const AddObservationModal: React.FC<AddObservationModalProps> = ({
 }) => {
   const { showToast } = useToast();
 
+  type ObservationCategory = 'Communication' | 'Social' | 'Sensory' | 'Repetitive' | 'Emotional';
+  type ObservationSeverity = 'MILD' | 'MODERATE' | 'SEVERE';
+
   const [childId, setChildId] = useState(childrenList[0]?.id || '');
   const [behaviorTitle, setBehaviorTitle] = useState('');
-  const [category, setCategory] = useState<'Communication' | 'Social' | 'Sensory' | 'Repetitive' | 'Emotional'>('Sensory');
+  const [category, setCategory] = useState<ObservationCategory>('Sensory');
   const [frequency, setFrequency] = useState(1);
-  const [severity, setSeverity] = useState<'MILD' | 'MODERATE' | 'SEVERE'>('MODERATE');
+  const [severity, setSeverity] = useState<ObservationSeverity>('MODERATE');
   const [trigger, setTrigger] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,8 +58,9 @@ export const AddObservationModal: React.FC<AddObservationModalProps> = ({
       showToast('Behavior observation logged successfully!', 'success');
       onSuccess();
       onClose();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to record behavior log', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to record behavior log';
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -83,7 +87,7 @@ export const AddObservationModal: React.FC<AddObservationModalProps> = ({
           <Select
             label="Category"
             value={category}
-            onChange={(e) => setCategory(e.target.value as any)}
+            onChange={(e) => setCategory(e.target.value as ObservationCategory)}
             options={[
               { label: 'Sensory', value: 'Sensory' },
               { label: 'Communication', value: 'Communication' },
@@ -104,7 +108,7 @@ export const AddObservationModal: React.FC<AddObservationModalProps> = ({
           <Select
             label="Severity Level"
             value={severity}
-            onChange={(e) => setSeverity(e.target.value as any)}
+            onChange={(e) => setSeverity(e.target.value as ObservationSeverity)}
             options={[
               { label: 'Mild', value: 'MILD' },
               { label: 'Moderate', value: 'MODERATE' },

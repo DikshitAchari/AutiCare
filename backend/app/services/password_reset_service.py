@@ -1,5 +1,6 @@
-import random
+import secrets
 import smtplib
+import logging
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -10,6 +11,8 @@ from app.core.config import get_settings
 from app.core.security import get_password_hash
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 
 class PasswordResetService:
     settings = get_settings()
@@ -17,15 +20,20 @@ class PasswordResetService:
     @staticmethod
     def generate_otp() -> str:
         """Generate a 6-digit OTP."""
-        return "".join([str(random.randint(0, 9)) for _ in range(6)])
+        return "".join(str(secrets.randbelow(10)) for _ in range(6))
 
     @staticmethod
     def send_otp_email(email: str, otp: str, user_name: str) -> bool:
         """Send OTP to user's email address."""
         if not PasswordResetService.settings.smtp_username or not PasswordResetService.settings.smtp_password:
-            # In development without email config, just log it
-            print(f"[DEV MODE] OTP for {email}: {otp}")
-            return True
+            settings = PasswordResetService.settings
+            if (
+                settings.allow_dev_otp_logging
+                and settings.debug
+                and settings.app_env.strip().lower() in {"dev", "development", "test"}
+            ):
+                logger.warning("Development-only password reset OTP: %s", otp)
+            return False
 
         try:
             subject = "AutiCare - Password Reset OTP"
@@ -67,8 +75,8 @@ class PasswordResetService:
                 server.send_message(msg)
 
             return True
-        except Exception as e:
-            print(f"Failed to send email to {email}: {str(e)}")
+        except Exception:
+            logger.error("Failed to send password reset email.")
             return False
 
     @staticmethod

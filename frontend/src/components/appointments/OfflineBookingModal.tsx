@@ -27,7 +27,8 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
   const [childId, setChildId] = useState(childrenList[0]?.id || '');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('');
-  const [appointmentType, setAppointmentType] = useState<'ONLINE' | 'IN_PERSON'>('IN_PERSON');
+  type AppointmentType = 'ONLINE' | 'IN_PERSON';
+  const [appointmentType, setAppointmentType] = useState<AppointmentType>('IN_PERSON');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -64,8 +65,9 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
 
       showToast(`Offline slot locked successfully for ${selectedChild.name} on ${date} at ${time}. Parents can no longer book this slot.`, 'success');
       onClose();
-    } catch (err: any) {
-      showToast(err?.message || 'Slot conflict or booking error', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Slot conflict or booking error';
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -104,7 +106,7 @@ export const OfflineBookingModal: React.FC<OfflineBookingModalProps> = ({
           <Select
             label="Location Format"
             value={appointmentType}
-            onChange={(e) => setAppointmentType(e.target.value as any)}
+            onChange={(e) => setAppointmentType(e.target.value as AppointmentType)}
             options={[
               { label: 'In-Person Clinic Visit', value: 'IN_PERSON' },
               { label: 'Online Tele-Session', value: 'ONLINE' }

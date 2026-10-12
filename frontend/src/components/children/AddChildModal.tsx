@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
-import { childApi } from '../../services/mockApi/childApi';
+import { childApi } from '../../services/api/childApi';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -53,8 +53,6 @@ export const AddChildModal: React.FC<AddChildModalProps> = ({ isOpen, onClose, o
       const calculatedAge = Math.max(1, currentYear - birthYear);
 
       await childApi.addChild({
-        parentId: user.id,
-        parentName: user.name,
         name: data.name,
         dob: data.dob,
         age: calculatedAge,
@@ -62,14 +60,14 @@ export const AddChildModal: React.FC<AddChildModalProps> = ({ isOpen, onClose, o
         school: data.school,
         grade: data.grade,
         parentNotes: data.parentNotes
-      });
+      }, user.id, user.name);
 
       showToast(`Child record created for ${data.name}!`, 'success');
       reset();
       onSuccess();
       onClose();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to add child profile', 'error');
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Failed to add child profile', 'error');
     }
   };
 

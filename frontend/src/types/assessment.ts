@@ -58,4 +58,54 @@ export interface AssessmentResult {
   disclaimer: string;
 }
 
+export type BehaviorAnalysisStatus = 'detected' | 'not_detected' | 'not_analyzed';
+
+export interface PoseMotionChannelSummary {
+  quality_status?: string;
+  usable_frames?: number;
+  total_frames?: number;
+  coverage_percent?: number;
+  periodicity_score?: number;
+  candidate_cycles?: number;
+  dominant_frequency_hz?: number | null;
+  interpretation?: string;
+}
+
+export interface PoseAnalysisSummary {
+  status?: string;
+  engine?: string;
+  trajectory_json?: string;
+  video_summary?: Record<string, unknown>;
+  channels?: Record<string, PoseMotionChannelSummary>;
+  dominant_channels?: Array<Record<string, unknown>>;
+  limitations?: string[];
+}
+
+export interface BehaviorSegment {
+  start_frame: number;
+  end_frame: number;
+  behavior: string;
+  classification_confidence: number;
+  proposal_confidence: number;
+}
+
+export interface BehaviorFinding {
+  name: string;
+  status: BehaviorAnalysisStatus;
+  confidence: number | null;
+  model: string | null;
+  segments: BehaviorSegment[];
+}
+
+export interface BehaviorAnalysis {
+  analysis_type: 'RRB_behavior_analysis';
+  behaviors: BehaviorFinding[];
+  additional_observations: BehaviorFinding[];
+  supported_behavior_count: number;
+  analyzed_behavior_count: number;
+  detected_behavior_count: number;
+  repetitive_behavior_detected: boolean;
+  disclaimer: string;
+}
+
 export type ScreeningResult = AssessmentResult;

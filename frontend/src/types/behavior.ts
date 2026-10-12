@@ -22,4 +22,4 @@ export interface BehaviorRecord {
   createdAt: string;
 }
 
-export interface BehaviorLog extends BehaviorRecord {}
+export type BehaviorLog = BehaviorRecord;

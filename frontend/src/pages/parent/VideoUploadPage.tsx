@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { UploadCloud, CheckCircle2, FileVideo, ShieldAlert, ArrowRight } from 'lucide-react';
@@ -17,6 +17,8 @@ export const VideoUploadPage: React.FC = () => {
   const [selectedChildId, setSelectedChildId] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [statusText, setStatusText] = useState('');
+  const uploadInProgress = useRef(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -30,6 +32,7 @@ export const VideoUploadPage: React.FC = () => {
   }, [user, showToast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isUploading) return;
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
     }
@@ -38,12 +41,14 @@ export const VideoUploadPage: React.FC = () => {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
+    if (isUploading) return;
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setSelectedFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleUpload = async () => {
+    if (uploadInProgress.current) return;
     if (!selectedFile) {
       showToast('Please select or drag a video file first', 'warning');
       return;
@@ -52,15 +57,21 @@ export const VideoUploadPage: React.FC = () => {
       showToast('Please add or select a child profile first', 'warning');
       return;
     }
+    uploadInProgress.current = true;
     setIsUploading(true);
+    setStatusText('Uploading video...');
     try {
-      const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile);
+      const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile, () => {
+        setStatusText('Video uploaded. Running pbr4RRB inference; CPU analysis may take several minutes...');
+      });
       showToast('AI4ASD behavior video analyzed successfully!', 'success');
       navigate('/parent/results', { state: { result } });
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Video analysis failed', 'error');
     } finally {
+      uploadInProgress.current = false;
       setIsUploading(false);
+      setStatusText('');
     }
   };
 
@@ -81,6 +92,7 @@ export const VideoUploadPage: React.FC = () => {
           <select
             value={selectedChildId}
             onChange={(event) => setSelectedChildId(event.target.value)}
+            disabled={isUploading}
             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
           >
             {children.length === 0 ? (
@@ -119,6 +131,7 @@ export const VideoUploadPage: React.FC = () => {
                   type="file"
                   accept="video/mp4,video/avi,video/quicktime,video/mov"
                   onChange={handleFileChange}
+                  disabled={isUploading}
                   className="hidden"
                 />
               </label>
@@ -171,6 +184,11 @@ export const VideoUploadPage: React.FC = () => {
             </button>
           </div>
         </div>
+        {isUploading && (
+          <p role="status" className="rounded-xl border border-purple-200 bg-purple-50 p-3 text-xs font-semibold text-purple-800">
+            {statusText}
+          </p>
+        )}
       </div>
     </div>
   );

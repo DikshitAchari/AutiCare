@@ -1,9 +1,12 @@
 import os
 import tempfile
+from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.security import get_current_user_token
 from app.core.config import get_settings
@@ -15,27 +18,54 @@ from app.services.prediction_service import ModelConfigurationError, ModelInfere
 router = APIRouter(prefix="/api", tags=["prediction"])
 settings = get_settings()
 
+VIDEO_UPLOAD_DIRECTORY = Path(__file__).resolve().parents[2] / "runtime" / "uploads"
 ALLOWED_VIDEO_TYPES = {
-    "video/mp4",
-    "video/avi",
-    "video/x-msvideo",
-    "video/quicktime",
-    "video/mov",
+    ".mp4": {"video/mp4"},
+    ".avi": {"video/avi", "video/x-msvideo"},
+    ".mov": {"video/quicktime", "video/mov"},
 }
 
 
+def validate_video_upload(
+    filename: str | None,
+    content_type: str | None,
+    size: int,
+    max_bytes: int,
+) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix not in ALLOWED_VIDEO_TYPES or content_type not in ALLOWED_VIDEO_TYPES[suffix]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video type. Upload an MP4, AVI, or MOV file.",
+        )
+    if size <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded video file is empty.",
+        )
+    if size > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Video is too large. Maximum allowed size is {max_bytes // (1024 * 1024)} MB.",
+        )
+    return suffix
+
+
 def to_prediction_response(record: PredictionAnalysis) -> PredictionResponse:
+    raw_output = record.raw_output if isinstance(record.raw_output, dict) else {}
     return PredictionResponse(
         id=record.id,
         child_id=record.child_id,
         support_indicator=record.support_indicator,
-        confidence_score=record.confidence_score or 0,
-        percentage=record.percentage or 0,
+        confidence_score=record.confidence_score,
+        percentage=record.percentage,
         summary=record.summary,
         recommendations=record.recommendations or [],
         disclaimer=record.disclaimer,
         source=record.source,
         created_at=record.created_at.isoformat() if record.created_at else None,
+        behavior_analysis=raw_output.get("behavior_analysis"),
+        pose_analysis=raw_output.get("pose_analysis"),
     )
 
 
@@ -105,16 +135,20 @@ async def analyze_video(
     token_payload: dict = Depends(get_current_user_token),
     db: Session = Depends(get_db),
 ):
-    if file.content_type not in ALLOWED_VIDEO_TYPES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid video type. Upload MP4, AVI, or MOV.")
-
     user_id = int(token_payload.get("sub"))
     max_bytes = settings.max_video_upload_mb * 1024 * 1024
     temp_path = None
 
     try:
-        suffix = os.path.splitext(file.filename or "")[1] or ".mp4"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        PredictionService.validate_child_access(db, child_id=child_id, user_id=user_id)
+        suffix = validate_video_upload(file.filename, file.content_type, 1, max_bytes)
+        VIDEO_UPLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            dir=VIDEO_UPLOAD_DIRECTORY,
+            prefix="video-",
+            suffix=suffix,
+        ) as temp_file:
             temp_path = temp_file.name
             total = 0
             while True:
@@ -129,15 +163,21 @@ async def analyze_video(
                     )
                 temp_file.write(chunk)
 
-        result = PredictionService.analyze_video(temp_path)
+        validate_video_upload(file.filename, file.content_type, total, max_bytes)
+        result = await run_in_threadpool(PredictionService.analyze_video, temp_path)
+        pose_analysis = PredictionService.analyze_pose_temporally(temp_path)
         record = PredictionService.save_result(
             db,
             child_id=child_id,
             user_id=user_id,
             source="video",
-            result=result,
-            model_name=settings.ai_video_model_command,
-            raw_output=result,
+            result={**result, "pose_analysis": pose_analysis},
+            model_name="AI4ASD-pbr4RRB",
+            raw_output={
+                "model_output": result["model_output"],
+                "behavior_analysis": result["behavior_analysis"],
+                "pose_analysis": pose_analysis,
+            },
         )
         return to_prediction_response(record)
     except HTTPException:
@@ -150,6 +190,16 @@ async def analyze_video(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except ModelInferenceError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Video analysis failed: {exc}") from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to verify the child profile or save the video analysis result.",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to store or clean up the uploaded video.",
+        ) from exc
     finally:
         await file.close()
         if temp_path and os.path.exists(temp_path):

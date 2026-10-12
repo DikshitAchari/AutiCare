@@ -32,7 +32,9 @@ export const TherapistReportsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    // Initial report hydration is intentionally performed as async data load.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
   }, []);
 
   const handleQuickObservationSubmit = async (e: React.FormEvent) => {
@@ -61,8 +63,9 @@ export const TherapistReportsPage: React.FC = () => {
       showToast(`Behavior observation entry submitted for ${selectedChild.name}!`, 'success');
       setObservationNotes('');
       loadData();
-    } catch (err: any) {
-      showToast('Failed to record entry', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to record entry';
+      showToast(message, 'error');
     } finally {
       setIsSaving(false);
     }

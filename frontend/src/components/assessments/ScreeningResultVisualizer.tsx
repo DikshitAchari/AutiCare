@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AssessmentResult } from '../../types/assessment';
+import type { AssessmentResult, BehaviorAnalysis, BehaviorFinding } from '../../types/assessment';
 import { StatusBadge } from '../ui/StatusBadge';
 import { Button } from '../ui/Button';
 import { ArrowRight, Calendar, Download, CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -25,7 +25,7 @@ export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps>
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">AI Screening Report</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Completed on {new Date(result.completedDate || Date.now()).toLocaleDateString()}
+            Completed on {new Date(result.completedDate).toLocaleDateString()}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -118,3 +118,114 @@ export const ScreeningResultVisualizer: React.FC<ScreeningResultVisualizerProps>
     </div>
   );
 };
+
+interface BehaviorAnalysisReportProps {
+  analysis: BehaviorAnalysis;
+  completedDate?: string;
+  disclaimer: string;
+}
+
+const getBehaviorStatusLabel = (finding: BehaviorFinding): string => {
+  if (finding.status === 'detected') return 'Detected';
+  if (finding.status === 'not_detected') return 'Not detected';
+  return 'Not analyzed by current model';
+};
+
+const BehaviorFindingCard: React.FC<{ finding: BehaviorFinding }> = ({ finding }) => (
+  <article className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <h3 className="text-sm font-extrabold text-slate-900">{finding.name}</h3>
+      <span
+        className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+          finding.status === 'detected'
+            ? 'bg-emerald-100 text-emerald-800'
+            : finding.status === 'not_detected'
+              ? 'bg-slate-100 text-slate-700'
+              : 'bg-amber-100 text-amber-900'
+        }`}
+      >
+        {getBehaviorStatusLabel(finding)}
+      </span>
+    </div>
+    {finding.status === 'detected' && finding.confidence !== null && (
+      <p className="mt-2 text-xs font-semibold text-slate-600">
+        Model confidence: {Math.round(finding.confidence * 100)}%
+      </p>
+    )}
+    {finding.status === 'detected' && finding.model && (
+      <p className="mt-1 text-xs text-slate-500">Model: {finding.model}</p>
+    )}
+    {finding.segments.length > 0 && (
+      <p className="mt-1 text-xs text-slate-500">
+        Detected segment frame range{finding.segments.length === 1 ? '' : 's'}:{' '}
+        {finding.segments
+          .map((segment) => `${segment.start_frame}-${segment.end_frame}`)
+          .join(', ')}
+      </p>
+    )}
+  </article>
+);
+
+export const BehaviorAnalysisReport: React.FC<BehaviorAnalysisReportProps> = ({
+  analysis,
+  completedDate,
+  disclaimer
+}) => (
+  <div className="mx-auto max-w-4xl space-y-6">
+    <header>
+      <h1 className="text-2xl font-black tracking-tight text-slate-900">Video Behavior Analysis</h1>
+      {completedDate && (
+        <p className="mt-1 text-xs font-medium text-slate-500">
+          Completed on {new Date(completedDate).toLocaleDateString()}
+        </p>
+      )}
+    </header>
+
+    <section className="grid grid-cols-1 gap-3 rounded-3xl border border-slate-100 bg-white p-5 sm:grid-cols-3">
+      <p className="text-sm font-semibold text-slate-700">
+        Model-supported target behaviors: {analysis.supported_behavior_count} of {analysis.behaviors.length}
+      </p>
+      <p className="text-sm font-semibold text-slate-700">
+        Behaviors with a model finding: {analysis.analyzed_behavior_count}
+      </p>
+      <p className="text-sm font-semibold text-slate-700">
+        Behaviors detected: {analysis.detected_behavior_count}
+      </p>
+    </section>
+
+    {!analysis.repetitive_behavior_detected && (
+      <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        The model did not identify a qualifying repetitive segment in this video. Behavior-specific
+        classifications were not produced.
+      </p>
+    )}
+
+    <section className="space-y-3">
+      <h2 className="text-base font-extrabold text-slate-900">Target behaviors</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {analysis.behaviors.map((finding) => (
+          <BehaviorFindingCard key={finding.name} finding={finding} />
+        ))}
+      </div>
+    </section>
+
+    {analysis.additional_observations.length > 0 && (
+      <section className="space-y-3">
+        <h2 className="text-base font-extrabold text-slate-900">Additional model observations</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {analysis.additional_observations.map((finding) => (
+            <BehaviorFindingCard key={finding.name} finding={finding} />
+          ))}
+        </div>
+        <p className="text-xs text-slate-500">
+          Head Banging is shown as its own model class; it is not treated as equivalent to the
+          broader self-hitting/self-injury category.
+        </p>
+      </section>
+    )}
+
+    <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-950">
+      {disclaimer}
+    </p>
+  </div>
+);

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { ChatThread, Message } from '../types/message';
 import { storageService } from '../services/storage/storageService';

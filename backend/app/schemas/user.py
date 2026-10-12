@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -123,17 +123,46 @@ class PredictionRequest(BaseModel):
     answers: Dict[str, int] = Field(...)
 
 
+class BehaviorSegment(BaseModel):
+    start_frame: int
+    end_frame: int
+    behavior: str
+    classification_confidence: float
+    proposal_confidence: float
+
+
+class BehaviorFinding(BaseModel):
+    name: str
+    status: Literal["detected", "not_detected", "not_analyzed"]
+    confidence: Optional[float] = None
+    model: Optional[str] = None
+    segments: List[BehaviorSegment] = Field(default_factory=list)
+
+
+class BehaviorAnalysis(BaseModel):
+    analysis_type: Literal["RRB_behavior_analysis"] = "RRB_behavior_analysis"
+    behaviors: List[BehaviorFinding]
+    additional_observations: List[BehaviorFinding] = Field(default_factory=list)
+    supported_behavior_count: int
+    analyzed_behavior_count: int
+    detected_behavior_count: int
+    repetitive_behavior_detected: bool
+    disclaimer: str
+
+
 class PredictionResponse(BaseModel):
     id: Optional[int] = None
     child_id: int
-    support_indicator: str
-    confidence_score: int
-    percentage: int
+    support_indicator: Optional[str] = None
+    confidence_score: Optional[int] = None
+    percentage: Optional[int] = None
     summary: str
     recommendations: List[str]
     disclaimer: str
     source: str = "questionnaire"
     created_at: Optional[str] = None
+    behavior_analysis: Optional[BehaviorAnalysis] = None
+    pose_analysis: Optional[Dict[str, Any]] = None
 
 
 class PredictionHistoryItem(PredictionResponse):

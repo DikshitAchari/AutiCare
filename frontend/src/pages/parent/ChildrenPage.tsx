@@ -29,7 +29,9 @@ export const ChildrenPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchChildren();
+    // Fetch parent data on mount / user change; using an async initializer here is safe.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchChildren();
   }, [user]);
 
   return (

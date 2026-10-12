@@ -67,8 +67,9 @@ export const AssessmentWizard: React.FC<AssessmentWizardProps> = ({ childrenList
 
       showToast('Assessment submitted! Viewing AI results...', 'success');
       navigate('/parent/results', { state: { result } });
-    } catch (err: any) {
-      showToast(err?.message || 'Submission failed', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Submission failed';
+      showToast(message, 'error');
     } finally {
       setIsSubmitting(false);
     }

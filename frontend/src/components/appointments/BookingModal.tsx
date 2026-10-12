@@ -30,7 +30,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [childId, setChildId] = useState(childrenList[0]?.id || '');
   const [date, setDate] = useState(() => new Date(Date.now() + 86400000).toISOString().split('T')[0]);
   const [time, setTime] = useState('');
-  const [appointmentType, setAppointmentType] = useState<'ONLINE' | 'IN_PERSON'>('ONLINE');
+  type AppointmentType = 'ONLINE' | 'IN_PERSON';
+  const [appointmentType, setAppointmentType] = useState<AppointmentType>('ONLINE');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -66,8 +67,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
       showToast(`Appointment booked successfully with ${therapist.name} for ${date} at ${time}`, 'success');
       onClose();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to book appointment', 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to book appointment';
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -103,7 +105,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           <Select
             label="Session Format"
             value={appointmentType}
-            onChange={(e) => setAppointmentType(e.target.value as any)}
+            onChange={(e) => setAppointmentType(e.target.value as AppointmentType)}
             options={[
               { label: 'Online Tele-Consultation', value: 'ONLINE' },
               { label: 'In-Person Clinic Visit', value: 'IN_PERSON' }

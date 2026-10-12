@@ -16,7 +16,7 @@ export const childApi = {
     return storageService.getChildren();
   },
 
-  addChild: async (intake: ChildIntakeForm | any, parentId?: string, parentName?: string): Promise<Child> => {
+  addChild: async (intake: ChildIntakeForm & { parentId?: string; parentName?: string }, parentId?: string, parentName?: string): Promise<Child> => {
     const pId = parentId || intake.parentId || 'parent-1';
     const pName = parentName || intake.parentName || 'Parent User';
 

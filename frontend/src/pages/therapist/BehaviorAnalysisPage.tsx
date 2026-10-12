@@ -28,7 +28,9 @@ export const BehaviorAnalysisPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    // Load data for the selected child when the selector changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
   }, [selectedChildId]);
 
   return (

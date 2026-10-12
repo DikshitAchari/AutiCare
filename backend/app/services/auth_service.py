@@ -14,8 +14,6 @@ class AuthService:
             raise ValueError("User with this email already exists")
 
         role_upper = user_in.role.upper()
-        if role_upper == "PARENT" and not user_in.child:
-            raise ValueError("Child details are required for parent registration")
 
         try:
             user = User(

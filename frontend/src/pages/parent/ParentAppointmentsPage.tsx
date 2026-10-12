@@ -27,7 +27,7 @@ export const ParentAppointmentsPage: React.FC = () => {
             { id: 'table', label: 'Table View', icon: <List className="w-3.5 h-3.5" /> }
           ]}
           activeTab={viewMode}
-          onChange={(tabId) => setViewMode(tabId as any)}
+          onChange={(tabId) => setViewMode(tabId as 'cards' | 'table')}
           variant="pills"
         />
       </div>

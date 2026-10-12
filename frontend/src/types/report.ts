@@ -17,4 +17,4 @@ export interface ClinicalReport {
   createdAt: string;
 }
 
-export interface TherapyReport extends ClinicalReport {}
+export type TherapyReport = ClinicalReport;

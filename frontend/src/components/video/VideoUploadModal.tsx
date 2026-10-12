@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -24,6 +24,7 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
   const [selectedChildId, setSelectedChildId] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [statusText, setStatusText] = useState('');
+  const uploadInProgress = useRef(false);
 
   useEffect(() => {
     if (isOpen && user?.id) {
@@ -34,9 +35,11 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
             setSelectedChildId(list[0].id);
           }
         })
-        .catch(() => {});
+        .catch((error) => {
+          showToast(error instanceof Error ? error.message : 'Unable to load child profiles', 'error');
+        });
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, showToast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -45,6 +48,7 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
   };
 
   const handleUpload = async () => {
+    if (uploadInProgress.current) return;
     if (!selectedFile) {
       showToast('Please select a video file first', 'warning');
       return;
@@ -54,11 +58,14 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
       return;
     }
 
+    uploadInProgress.current = true;
     setIsUploading(true);
-    setStatusText('Uploading video & running AI4ASD neural network...');
+    setStatusText('Uploading video...');
 
     try {
-      const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile);
+      const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile, () => {
+        setStatusText('Video uploaded. Running pbr4RRB inference; CPU analysis may take several minutes...');
+      });
       showToast('AI4ASD video analysis completed successfully!', 'success');
       setSelectedFile(null);
       onClose();
@@ -67,6 +74,7 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
       const msg = error instanceof Error ? error.message : 'Video analysis failed';
       showToast(msg, 'error');
     } finally {
+      uploadInProgress.current = false;
       setIsUploading(false);
       setStatusText('');
     }
@@ -88,6 +96,7 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
             <select
               value={selectedChildId}
               onChange={(e) => setSelectedChildId(e.target.value)}
+              disabled={isUploading}
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500"
             >
               {children.length === 0 ? (

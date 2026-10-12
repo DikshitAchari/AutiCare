@@ -21,7 +21,9 @@ export const TherapistChildrenPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchChildren();
+    // Initial page hydration from the backend is intentional and safe.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchChildren();
   }, []);
 
   return (

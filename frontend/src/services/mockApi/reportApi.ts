@@ -19,7 +19,7 @@ export const reportApi = {
       createdAt: new Date().toISOString()
     };
     const updated = [newReport, ...current];
-    storageService.saveReports(updated as any);
+    storageService.saveReports(updated as ClinicalReport[]);
     return newReport;
   }
 };

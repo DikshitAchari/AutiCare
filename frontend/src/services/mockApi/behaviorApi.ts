@@ -15,17 +15,27 @@ export const behaviorApi = {
       createdAt: new Date().toISOString()
     };
     const updated = [newLog, ...current];
-    storageService.saveBehaviors(updated as any);
+    storageService.saveBehaviors(updated as BehaviorLog[]);
     return newLog;
   },
 
-  addBehaviorLog: async (data: any): Promise<BehaviorLog> => {
+  addBehaviorLog: async (data: {
+    childId: string;
+    date?: string;
+    category?: string;
+    behaviorTitle?: string;
+    description?: string;
+    severity?: 'MILD' | 'MODERATE' | 'SEVERE' | 'Low' | 'Moderate' | 'High';
+    frequency?: number;
+    trigger?: string;
+    notes?: string;
+  }): Promise<BehaviorLog> => {
     return behaviorApi.createLog({
       childId: data.childId,
       date: data.date || new Date().toISOString().split('T')[0],
       behaviorCategory: data.category || 'Sensory',
       behaviorDescription: data.behaviorTitle || data.description || 'Observed behavior',
-      intensityLevel: data.severity === 'SEVERE' ? 'HIGH' : data.severity === 'MODERATE' ? 'MODERATE' : 'LOW',
+      intensityLevel: data.severity === 'SEVERE' || data.severity === 'High' ? 'HIGH' : data.severity === 'MODERATE' || data.severity === 'Moderate' ? 'MODERATE' : 'LOW',
       frequencyCount: data.frequency || 1,
       triggerAntecedent: data.trigger,
       managementStrategy: data.notes

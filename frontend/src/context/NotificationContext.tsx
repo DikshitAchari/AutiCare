@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { Notification } from '../types/notification';
 import { storageService } from '../services/storage/storageService';

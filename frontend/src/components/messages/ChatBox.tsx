@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type { Role } from '../../types/auth';
 import { useMessages } from '../../context/MessageContext';
 import { useAuth } from '../../context/AuthContext';
 import { Send, Search, Phone, Video, Paperclip, CheckCircle2 } from 'lucide-react';
@@ -25,7 +26,7 @@ export const ChatBox: React.FC = () => {
     if (!text.trim() || !activeThread) return;
 
     const recipientId = user.role === 'PARENT' ? activeThread.therapistId : activeThread.parentId;
-    sendMessage(activeThread.id, user.id, user.name, user.role as any, recipientId, text.trim());
+    sendMessage(activeThread.id, user.id, user.name, user.role as Role, recipientId, text.trim());
     setText('');
   };
 
