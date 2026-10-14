@@ -7,7 +7,10 @@ import {
 import type { AssessmentResult } from '../../types/assessment';
 import { predictionApi, type PredictionResult } from '../../services/api/predictionApi';
 import { Loader2 } from 'lucide-react';
-import type { SupportIndicatorLevel } from '../../types/child';
+import type { Child, SupportIndicatorLevel } from '../../types/child';
+import { childApi } from '../../services/api/childApi';
+import { assessmentApi } from '../../services/api/assessmentApi';
+import { therapistApi, type TherapistRecommendation } from '../../services/api/therapistApi';
 
 const toSupportIndicator = (value?: string | null): SupportIndicatorLevel => {
   if (value === 'LOW' || value === 'MODERATE' || value === 'HIGH' || value === 'NOT_ASSESSED') {
@@ -60,6 +63,9 @@ export const AssessmentResultsPage: React.FC = () => {
     return toAssessmentResult(stateResult);
   });
   const [loading, setLoading] = useState(!stateResult);
+  const [child, setChild] = useState<Child | null>(null);
+  const [screeningAssessment, setScreeningAssessment] = useState<AssessmentResult | null>(null);
+  const [recommendations, setRecommendations] = useState<TherapistRecommendation[]>([]);
   const poseAnalysisData =
     activeResult && 'poseAnalysis' in activeResult
       ? (activeResult as PredictionResult).poseAnalysis
@@ -93,6 +99,17 @@ export const AssessmentResultsPage: React.FC = () => {
         .finally(() => setLoading(false));
     }
   }, [activeResult]);
+
+  useEffect(() => {
+    const cid = activeResult?.childId;
+    if (cid) {
+      childApi.getChildById(cid).then(setChild).catch(() => {});
+      assessmentApi.getResultsByChild(cid).then((list) => {
+        if (list.length > 0) setScreeningAssessment(list[0]);
+      }).catch(() => {});
+      therapistApi.getRecommendations(cid).then(setRecommendations).catch(() => {});
+    }
+  }, [activeResult?.childId]);
 
   if (loading) {
     return (
@@ -128,15 +145,22 @@ export const AssessmentResultsPage: React.FC = () => {
   }
 
   if ('behaviorAnalysis' in activeResult && activeResult.behaviorAnalysis) {
+    const isNotAnalyzable =
+      activeResult.behaviorAnalysis.status === 'not_analyzable' ||
+      activeResult.behaviorAnalysis.reason === 'no_person_detected';
+
     return (
       <div className="space-y-6">
         <BehaviorAnalysisReport
           analysis={activeResult.behaviorAnalysis}
           completedDate={activeResult.createdAt}
           disclaimer={activeResult.disclaimer}
+          child={child}
+          screeningAssessment={screeningAssessment}
+          recommendations={recommendations}
         />
 
-        {'poseAnalysis' in activeResult && activeResult.poseAnalysis && Object.keys(activeResult.poseAnalysis.channels ?? {}).length > 0 && (
+        {!isNotAnalyzable && 'poseAnalysis' in activeResult && activeResult.poseAnalysis && Object.keys(activeResult.poseAnalysis.channels ?? {}).length > 0 && (
           <section className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -180,6 +204,8 @@ export const AssessmentResultsPage: React.FC = () => {
     <div>
       <ScreeningResultVisualizer
         result={'domainScores' in activeResult ? activeResult : toAssessmentResult(activeResult)}
+        child={child}
+        recommendations={recommendations}
       />
     </div>
   );

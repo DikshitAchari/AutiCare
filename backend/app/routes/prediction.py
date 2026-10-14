@@ -13,7 +13,13 @@ from app.core.config import get_settings
 from app.database.connection import get_db
 from app.models.user import PredictionAnalysis
 from app.schemas.user import PredictionHistoryItem, PredictionRequest, PredictionResponse
-from app.services.prediction_service import ModelConfigurationError, ModelInferenceError, PredictionService
+from app.services.prediction_service import (
+    BEHAVIOR_DISCLAIMER,
+    BEHAVIOR_NAMES,
+    ModelConfigurationError,
+    ModelInferenceError,
+    PredictionService,
+)
 
 router = APIRouter(prefix="/api", tags=["prediction"])
 settings = get_settings()
@@ -164,6 +170,67 @@ async def analyze_video(
                 temp_file.write(chunk)
 
         validate_video_upload(file.filename, file.content_type, total, max_bytes)
+
+        # Human/Pose presence validation gate before expensive pbr4RRB inference:
+        presence = await run_in_threadpool(PredictionService.validate_human_presence, temp_path)
+        if not presence.get("has_human", False):
+            not_analyzable_result = {
+                "status": "not_analyzable",
+                "reason": "no_person_detected",
+                "support_indicator": "NOT_ASSESSED",
+                "confidence_score": None,
+                "percentage": None,
+                "summary": (
+                    "No analyzable person was detected in this video. "
+                    "Please upload a video where the person's body is clearly visible."
+                ),
+                "recommendations": [
+                    "Please upload a clear video with the person's body visible for behavioral analysis."
+                ],
+                "disclaimer": BEHAVIOR_DISCLAIMER,
+                "behavior_analysis": {
+                    "analysis_type": "RRB_behavior_analysis",
+                    "status": "not_analyzable",
+                    "reason": "no_person_detected",
+                    "behaviors": [
+                        {
+                            "name": name,
+                            "status": "not_analyzed",
+                            "confidence": None,
+                            "model": None,
+                            "segments": [],
+                        }
+                        for name in BEHAVIOR_NAMES
+                    ],
+                    "additional_observations": [],
+                    "supported_behavior_count": 0,
+                    "analyzed_behavior_count": 0,
+                    "detected_behavior_count": 0,
+                    "repetitive_behavior_detected": False,
+                    "disclaimer": BEHAVIOR_DISCLAIMER,
+                },
+                "pose_analysis": {
+                    "status": "not_analyzable",
+                    "reason": "no_person_detected",
+                    "has_human": False,
+                    "presence_details": presence,
+                },
+                "model_output": {
+                    "status": "not_analyzable",
+                    "reason": "no_person_detected",
+                },
+            }
+            record = PredictionService.save_result(
+                db,
+                child_id=child_id,
+                user_id=user_id,
+                source="video",
+                result=not_analyzable_result,
+                model_name="AI4ASD-pbr4RRB",
+                raw_output=not_analyzable_result,
+            )
+            return to_prediction_response(record)
+
         result = await run_in_threadpool(PredictionService.analyze_video, temp_path)
         pose_analysis = PredictionService.analyze_pose_temporally(temp_path)
         record = PredictionService.save_result(

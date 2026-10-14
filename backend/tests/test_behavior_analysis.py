@@ -505,3 +505,324 @@ def test_valid_video_inference_timeout_is_loaded():
     )
 
     assert settings.ai_video_inference_timeout_seconds == 1500
+
+
+def test_human_presence_validation_not_analyzable_contract():
+    from app.schemas.user import BehaviorAnalysis, PredictionResponse
+
+    # Verify BehaviorAnalysis schema supports not_analyzable status and reason
+    analysis = BehaviorAnalysis(
+        status="not_analyzable",
+        reason="no_person_detected",
+        behaviors=[],
+        additional_observations=[],
+        supported_behavior_count=0,
+        analyzed_behavior_count=0,
+        detected_behavior_count=0,
+        repetitive_behavior_detected=False,
+        disclaimer="Standard disclaimer",
+    )
+    assert analysis.status == "not_analyzable"
+    assert analysis.reason == "no_person_detected"
+    assert analysis.behaviors == []
+
+    # Verify structured non-diagnostic PredictionResponse
+    response = PredictionResponse(
+        child_id=1,
+        support_indicator="NOT_ASSESSED",
+        percentage=None,
+        confidence_score=None,
+        summary="No analyzable person was detected in this video. Please upload a video where the person's body is clearly visible.",
+        recommendations=["Upload a clear video with the child visible for behavioral analysis."],
+        disclaimer="Automated behavioral screening requires a clear view of an individual.",
+        source="video",
+        behavior_analysis=analysis,
+        pose_analysis=None,
+    )
+    assert response.support_indicator == "NOT_ASSESSED"
+    assert response.percentage is None
+    assert response.confidence_score is None
+    assert response.behavior_analysis.status == "not_analyzable"
+    assert response.behavior_analysis.reason == "no_person_detected"
+
+
+def test_human_presence_validation_subprocess_invocation(monkeypatch):
+    import json
+    from unittest.mock import MagicMock
+
+    mock_run = MagicMock()
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stdout = json.dumps({
+        "has_human": False,
+        "reason": "no_person_detected",
+        "detection_ratio": 0.0,
+        "frames_with_pose": 0,
+        "total_checked": 30
+    })
+    monkeypatch.setattr("subprocess.run", mock_run)
+    monkeypatch.setattr("os.path.exists", lambda _p: True)
+
+    result = PredictionService.validate_human_presence("dummy_path.mp4")
+    assert result["has_human"] is False
+    assert result["reason"] == "no_person_detected"
+    assert result["detection_ratio"] == 0.0
+
+
+def test_confidence_gate_rejects_weak_prediction():
+    weak_output = pbr_output(
+        behavior="HeadBanging",
+        confidence=0.499,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 379,
+                "behavior": "HeadBanging",
+                "classification_confidence": 0.499,
+                "proposal_confidence": 0.548,
+            }
+        ],
+    )
+    analysis = build_behavior_analysis(weak_output)
+    assert analysis["status"] == "no_supported_behavior_detected"
+    assert analysis["reason"] == "insufficient_confidence"
+    assert analysis["repetitive_behavior_detected"] is False
+    assert analysis["detected_behavior_count"] == 0
+    # Head Banging should NOT be marked detected
+    head_banging = analysis["additional_observations"][0]
+    assert head_banging["status"] == "not_detected"
+    assert head_banging["confidence"] is None
+
+
+def test_confidence_gate_accepts_strong_prediction():
+    strong_output = pbr_output(
+        behavior="HeadBanging",
+        confidence=0.8205,
+        segments=[
+            {
+                "start_frame": 10,
+                "end_frame": 150,
+                "behavior": "HeadBanging",
+                "classification_confidence": 0.8205,
+                "proposal_confidence": 0.84,
+            }
+        ],
+    )
+    analysis = build_behavior_analysis(strong_output)
+    assert analysis["status"] == "success"
+    assert analysis["reason"] == "behavior_detected"
+    assert analysis["repetitive_behavior_detected"] is True
+    assert analysis["additional_observations"][0]["status"] == "detected"
+    assert analysis["additional_observations"][0]["confidence"] == 0.8205
+    assert len(analysis["detected_behaviors"]) == 1
+    assert analysis["detected_behaviors"][0]["behavior"] == "Head Banging"
+
+
+def test_multiple_accepted_behaviors_preserved():
+    multi_output = pbr_output(
+        behavior="ArmFlapping",
+        confidence=0.85,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 120,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.85,
+                "proposal_confidence": 0.80,
+            },
+            {
+                "start_frame": 150,
+                "end_frame": 280,
+                "behavior": "HeadBanging",
+                "classification_confidence": 0.76,
+                "proposal_confidence": 0.75,
+            },
+        ],
+    )
+    analysis = build_behavior_analysis(multi_output)
+    assert analysis["status"] == "success"
+    assert analysis["reason"] == "behavior_detected"
+    assert analysis["repetitive_behavior_detected"] is True
+    assert len(analysis["detected_behaviors"]) == 2
+    detected_names = [d["behavior"] for d in analysis["detected_behaviors"]]
+    assert "Hand Flapping" in detected_names
+    assert "Head Banging" in detected_names
+    flapping = next(d for d in analysis["detected_behaviors"] if d["behavior"] == "Hand Flapping")
+    banging = next(d for d in analysis["detected_behaviors"] if d["behavior"] == "Head Banging")
+    assert flapping["confidence"] == 0.85
+    assert banging["confidence"] == 0.76
+
+
+def test_duplicate_behavior_aggregation():
+    multi_segment_same_class = pbr_output(
+        behavior="ArmFlapping",
+        confidence=0.88,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 100,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.72,
+                "proposal_confidence": 0.70,
+            },
+            {
+                "start_frame": 200,
+                "end_frame": 350,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.88,
+                "proposal_confidence": 0.85,
+            },
+        ],
+    )
+    analysis = build_behavior_analysis(multi_segment_same_class)
+    # Should not duplicate the behavior in detected_behaviors
+    assert len(analysis["detected_behaviors"]) == 1
+    assert analysis["detected_behaviors"][0]["behavior"] == "Hand Flapping"
+    assert analysis["detected_behaviors"][0]["confidence"] == 0.88
+    assert len(analysis["detected_behaviors"][0]["segments"]) == 2
+
+
+def test_per_behavior_confidence_threshold_in_multi_segment():
+    mixed_output = pbr_output(
+        behavior="ArmFlapping",
+        confidence=0.82,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 100,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.82,
+                "proposal_confidence": 0.80,
+            },
+            {
+                "start_frame": 120,
+                "end_frame": 220,
+                "behavior": "Spinning",
+                "classification_confidence": 0.42,
+                "proposal_confidence": 0.50,
+            },
+        ],
+    )
+    analysis = build_behavior_analysis(mixed_output)
+    # Only ArmFlapping >= 0.60 is accepted; Spinning (0.42 < 0.60) is rejected
+    assert len(analysis["detected_behaviors"]) == 1
+    assert analysis["detected_behaviors"][0]["behavior"] == "Hand Flapping"
+    turning = next(b for b in analysis["behaviors"] if b["name"] == "Repeated Turning/Twirling")
+    assert turning["status"] == "not_detected"
+    assert turning["confidence"] is None
+
+
+def test_aggregate_temporal_windows_detects_both_headbanging_and_armflapping():
+    window1 = pbr_output(
+        behavior="HeadBanging",
+        confidence=0.7250,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 143,
+                "behavior": "HeadBanging",
+                "classification_confidence": 0.7250,
+                "proposal_confidence": 0.5878,
+            }
+        ],
+    )
+    window2 = pbr_output(
+        behavior="ArmFlapping",
+        confidence=0.9062,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 146,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.9062,
+                "proposal_confidence": 0.6469,
+            }
+        ],
+    )
+    metadata = [{"start_frame": 0}, {"start_frame": 150}]
+
+    agg = PredictionService.aggregate_temporal_windows([window1, window2], metadata)
+    assert agg["status"] == "success"
+    assert agg["repetitive_behavior_detected"] is True
+    assert agg["behavior"] == "ArmFlapping"
+    assert agg["confidence"] == 0.9062
+    assert len(agg["segments"]) == 2
+    assert agg["segments"][0]["behavior"] == "HeadBanging"
+    assert agg["segments"][0]["start_frame"] == 0
+    assert agg["segments"][1]["behavior"] == "ArmFlapping"
+    assert agg["segments"][1]["start_frame"] == 150
+
+    analysis = build_behavior_analysis(agg)
+    assert analysis["status"] == "success"
+    assert analysis["repetitive_behavior_detected"] is True
+    assert len(analysis["detected_behaviors"]) == 2
+
+    behaviors = {b["behavior"]: b["confidence"] for b in analysis["detected_behaviors"]}
+    assert "Hand Flapping" in behaviors
+    assert "Head Banging" in behaviors
+    assert behaviors["Hand Flapping"] == 0.9062
+    assert behaviors["Head Banging"] == 0.7250
+
+
+def test_aggregate_temporal_windows_deduplicates_repeated_classes():
+    window1 = pbr_output(
+        behavior="ArmFlapping",
+        confidence=0.9062,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 146,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.9062,
+                "proposal_confidence": 0.6469,
+            }
+        ],
+    )
+    window2 = pbr_output(
+        behavior="ArmFlapping",
+        confidence=0.8231,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 144,
+                "behavior": "ArmFlapping",
+                "classification_confidence": 0.8231,
+                "proposal_confidence": 0.6789,
+            }
+        ],
+    )
+    metadata = [{"start_frame": 150}, {"start_frame": 300}]
+
+    agg = PredictionService.aggregate_temporal_windows([window1, window2], metadata)
+    assert len(agg["segments"]) == 2
+    assert agg["confidence"] == 0.9062
+
+    analysis = build_behavior_analysis(agg)
+    # Deduplicated: only 1 Hand Flapping entry in detected_behaviors
+    assert len(analysis["detected_behaviors"]) == 1
+    assert analysis["detected_behaviors"][0]["behavior"] == "Hand Flapping"
+    assert analysis["detected_behaviors"][0]["confidence"] == 0.9062
+    assert len(analysis["detected_behaviors"][0]["segments"]) == 2
+
+
+def test_aggregate_temporal_windows_rejects_sub_threshold():
+    sub_threshold_window = pbr_output(
+        behavior="Spinning",
+        confidence=0.5511,
+        segments=[
+            {
+                "start_frame": 0,
+                "end_frame": 114,
+                "behavior": "Spinning",
+                "classification_confidence": 0.5511,
+                "proposal_confidence": 0.6473,
+            }
+        ],
+    )
+    agg = PredictionService.aggregate_temporal_windows([sub_threshold_window])
+    assert agg["repetitive_behavior_detected"] is False
+    assert agg["behavior"] is None
+    assert agg["confidence"] is None
+    assert len(agg["segments"]) == 0
+
+
+

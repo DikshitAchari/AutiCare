@@ -139,10 +139,19 @@ class BehaviorFinding(BaseModel):
     segments: List[BehaviorSegment] = Field(default_factory=list)
 
 
+class DetectedBehaviorItem(BaseModel):
+    behavior: str
+    confidence: Optional[float] = None
+    segments: List[BehaviorSegment] = Field(default_factory=list)
+
+
 class BehaviorAnalysis(BaseModel):
     analysis_type: Literal["RRB_behavior_analysis"] = "RRB_behavior_analysis"
+    status: Optional[str] = "analyzed"
+    reason: Optional[str] = None
     behaviors: List[BehaviorFinding]
     additional_observations: List[BehaviorFinding] = Field(default_factory=list)
+    detected_behaviors: List[DetectedBehaviorItem] = Field(default_factory=list)
     supported_behavior_count: int
     analyzed_behavior_count: int
     detected_behavior_count: int

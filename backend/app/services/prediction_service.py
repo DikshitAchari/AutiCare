@@ -6,7 +6,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -96,6 +96,13 @@ def parse_model_command(command_value: Optional[str]) -> List[str]:
     return command
 
 
+# General confidence acceptance threshold for behavioral detection.
+# In a 3-class temporal action model with baseline chance of 33.3%,
+# predictions below 0.60 represent ambiguous or weak evidence and must not
+# be accepted as positive clinical behavioral detections.
+CONFIDENCE_ACCEPTANCE_THRESHOLD = 0.60
+
+
 def build_behavior_analysis(model_output: dict) -> dict:
     if not isinstance(model_output, dict) or model_output.get("status") != "success":
         raise ModelInferenceError("Video model JSON must report a successful inference.")
@@ -163,13 +170,7 @@ def build_behavior_analysis(model_output: dict) -> dict:
 
     def finding(name: str, class_name: str) -> dict:
         matched_segments = [item for item in segments if item["behavior"] == class_name]
-        if behavior == class_name:
-            finding_confidence = aggregate_confidence
-        elif matched_segments:
-            finding_confidence = max(
-                item["classification_confidence"] for item in matched_segments
-            )
-        else:
+        if not matched_segments and behavior != class_name:
             return {
                 "name": name,
                 "status": "not_analyzed",
@@ -177,13 +178,50 @@ def build_behavior_analysis(model_output: dict) -> dict:
                 "model": None,
                 "segments": [],
             }
-        return {
-            "name": name,
-            "status": "detected",
-            "confidence": finding_confidence,
-            "model": PBR4RRB_MODEL_NAME,
-            "segments": matched_segments,
-        }
+
+        accepted_segments = [
+            item for item in matched_segments
+            if item.get("classification_confidence", 0) >= CONFIDENCE_ACCEPTANCE_THRESHOLD
+        ]
+
+        if behavior == class_name and aggregate_confidence is not None:
+            if aggregate_confidence >= CONFIDENCE_ACCEPTANCE_THRESHOLD:
+                finding_confidence = aggregate_confidence
+                valid_segments = accepted_segments if accepted_segments else matched_segments
+                return {
+                    "name": name,
+                    "status": "detected",
+                    "confidence": finding_confidence,
+                    "model": PBR4RRB_MODEL_NAME,
+                    "segments": valid_segments,
+                }
+            else:
+                return {
+                    "name": name,
+                    "status": "not_detected",
+                    "confidence": None,
+                    "model": PBR4RRB_MODEL_NAME,
+                    "segments": [],
+                }
+        elif accepted_segments:
+            finding_confidence = max(
+                item["classification_confidence"] for item in accepted_segments
+            )
+            return {
+                "name": name,
+                "status": "detected",
+                "confidence": finding_confidence,
+                "model": PBR4RRB_MODEL_NAME,
+                "segments": accepted_segments,
+            }
+        else:
+            return {
+                "name": name,
+                "status": "not_detected",
+                "confidence": None,
+                "model": PBR4RRB_MODEL_NAME,
+                "segments": [],
+            }
 
     mapped_findings = {
         name: finding(name, class_name)
@@ -211,19 +249,168 @@ def build_behavior_analysis(model_output: dict) -> dict:
     )
     detected_count = sum(item["status"] == "detected" for item in behaviors)
 
+    has_confidently_detected = any(
+        item["status"] == "detected" for item in behaviors + additional_observations
+    )
+    status = "success" if has_confidently_detected else "no_supported_behavior_detected"
+    reason = "behavior_detected" if has_confidently_detected else "insufficient_confidence"
+
+    detected_behaviors = [
+        {
+            "behavior": item["name"],
+            "confidence": item["confidence"],
+            "segments": item.get("segments", []),
+        }
+        for item in behaviors + additional_observations
+        if item.get("status") == "detected"
+    ]
+
     return {
         "analysis_type": "RRB_behavior_analysis",
+        "status": status,
+        "reason": reason,
         "behaviors": behaviors,
         "additional_observations": additional_observations,
+        "detected_behaviors": detected_behaviors,
         "supported_behavior_count": len(TARGET_CLASS_MAPPING),
         "analyzed_behavior_count": analyzed_count,
         "detected_behavior_count": detected_count,
-        "repetitive_behavior_detected": repetitive_detected,
+        "repetitive_behavior_detected": has_confidently_detected,
         "disclaimer": BEHAVIOR_DISCLAIMER,
     }
 
 
+def aggregate_temporal_windows(
+    window_results: List[dict],
+    window_metadata: Optional[List[dict]] = None,
+) -> dict:
+    """
+    Aggregate results from multiple temporal windows.
+    - Preserves model name and status.
+    - Aggregates accepted segments (classification_confidence >= 0.60).
+    - Deduplicates repeated classes.
+    - Calculates peak confidence per detected class.
+    - Sets video-level behavior to the highest-confidence detected action.
+    """
+    if not window_results:
+        return {
+            "status": "success",
+            "model": PBR4RRB_MODEL_NAME,
+            "behavior": None,
+            "confidence": None,
+            "repetitive_behavior_detected": False,
+            "segments": [],
+        }
+
+    aggregated_segments: List[dict] = []
+    class_peak_conf: Dict[str, float] = {}
+
+    for idx, res in enumerate(window_results):
+        if not isinstance(res, dict) or res.get("status") != "success":
+            continue
+        meta = window_metadata[idx] if window_metadata and idx < len(window_metadata) else {}
+        frame_offset = int(meta.get("start_frame", 0))
+
+        segments = res.get("segments") or []
+        for seg in segments:
+            conf = seg.get("classification_confidence")
+            behavior = seg.get("behavior")
+            if not behavior or conf is None or conf < CONFIDENCE_ACCEPTANCE_THRESHOLD:
+                continue
+
+            start_f = seg.get("start_frame", 0) + frame_offset
+            end_f = seg.get("end_frame", start_f + 1) + frame_offset
+
+            aggregated_segments.append(
+                {
+                    "start_frame": start_f,
+                    "end_frame": end_f,
+                    "behavior": behavior,
+                    "classification_confidence": conf,
+                    "proposal_confidence": seg.get("proposal_confidence", 0.0),
+                }
+            )
+
+            if behavior not in class_peak_conf or conf > class_peak_conf[behavior]:
+                class_peak_conf[behavior] = conf
+
+        win_behavior = res.get("behavior")
+        win_conf = res.get("confidence")
+        if (
+            win_behavior
+            and win_conf is not None
+            and win_conf >= CONFIDENCE_ACCEPTANCE_THRESHOLD
+            and not segments
+        ):
+            if win_behavior not in class_peak_conf or win_conf > class_peak_conf[win_behavior]:
+                class_peak_conf[win_behavior] = win_conf
+
+    if not class_peak_conf:
+        return {
+            "status": "success",
+            "model": PBR4RRB_MODEL_NAME,
+            "behavior": None,
+            "confidence": None,
+            "repetitive_behavior_detected": False,
+            "segments": [],
+        }
+
+    top_behavior = max(class_peak_conf.keys(), key=lambda b: class_peak_conf[b])
+    top_confidence = class_peak_conf[top_behavior]
+
+    return {
+        "status": "success",
+        "model": PBR4RRB_MODEL_NAME,
+        "behavior": top_behavior,
+        "confidence": top_confidence,
+        "repetitive_behavior_detected": True,
+        "segments": aggregated_segments,
+    }
+
+
 class PredictionService:
+    aggregate_temporal_windows = staticmethod(aggregate_temporal_windows)
+    @staticmethod
+    def validate_human_presence(video_path: str) -> dict:
+        project_root = Path(__file__).resolve().parents[3]
+        script_path = project_root / "experiments" / "pose_analysis" / "validate_human_presence.py"
+        if not script_path.exists():
+            return {"status": "skipped", "has_human": True, "reason": "validator_missing"}
+
+        candidates = [
+            os.environ.get("AUTICARE_POSE_PYTHON"),
+            str(Path(sys.prefix) / "envs" / "auticare-pose" / "python.exe"),
+            str(Path.home() / "anaconda3" / "envs" / "auticare-pose" / "python.exe"),
+            r"C:\Users\Vasanth.A\anaconda3\envs\auticare-pose\python.exe",
+            sys.executable,
+        ]
+        python_exe = next((c for c in candidates if c and os.path.exists(c)), sys.executable)
+
+        try:
+            completed = subprocess.run(
+                [python_exe, str(script_path), video_path],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return {"status": "error", "has_human": False, "reason": "validation_timeout", "error": str(exc)}
+
+        if completed.returncode != 0:
+            return {
+                "status": "error",
+                "has_human": False,
+                "reason": "validation_failed",
+                "error": completed.stderr.strip() or completed.stdout.strip(),
+            }
+
+        try:
+            lines = [line.strip() for line in completed.stdout.strip().splitlines() if line.strip()]
+            return json.loads(lines[-1])
+        except (json.JSONDecodeError, IndexError):
+            return {"status": "error", "has_human": False, "reason": "invalid_validator_output"}
+
     @staticmethod
     def analyze_pose_temporally(video_path: str) -> Optional[dict]:
         project_root = Path(__file__).resolve().parents[3]
@@ -453,15 +640,30 @@ class PredictionService:
             ) from exc
 
         behavior_analysis = build_behavior_analysis(payload)
+        is_behavior_detected = behavior_analysis["repetitive_behavior_detected"]
+
+        if is_behavior_detected:
+            summary = (
+                "Video analysis identified repetitive behavior patterns supported by the model."
+            )
+            recommendations = [
+                "Review findings with a pediatric therapist or clinical specialist.",
+                "Observe if behaviors occur across different environments.",
+            ]
+        else:
+            summary = (
+                "No supported repetitive behavior was confidently detected in this video."
+            )
+            recommendations = [
+                "For further confirmation or developmental concerns, consider consulting a qualified therapist or healthcare professional.",
+            ]
+
         return {
             "support_indicator": "NOT_ASSESSED",
             "confidence_score": None,
             "percentage": None,
-            "summary": (
-                "This video analysis reports only behavior classes supported by the "
-                "available model. Other listed behaviors were not analyzed."
-            ),
-            "recommendations": [],
+            "summary": summary,
+            "recommendations": recommendations,
             "disclaimer": BEHAVIOR_DISCLAIMER,
             "behavior_analysis": behavior_analysis,
             "model_output": payload,

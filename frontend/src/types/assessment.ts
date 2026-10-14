@@ -97,10 +97,19 @@ export interface BehaviorFinding {
   segments: BehaviorSegment[];
 }
 
+export interface DetectedBehaviorItem {
+  behavior: string;
+  confidence?: number | null;
+  segments?: BehaviorSegment[];
+}
+
 export interface BehaviorAnalysis {
   analysis_type: 'RRB_behavior_analysis';
+  status?: string;
+  reason?: string;
   behaviors: BehaviorFinding[];
   additional_observations: BehaviorFinding[];
+  detected_behaviors?: DetectedBehaviorItem[];
   supported_behavior_count: number;
   analyzed_behavior_count: number;
   detected_behavior_count: number;

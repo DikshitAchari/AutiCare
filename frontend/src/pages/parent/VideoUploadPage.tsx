@@ -62,7 +62,7 @@ export const VideoUploadPage: React.FC = () => {
     setStatusText('Uploading video...');
     try {
       const result = await predictionApi.analyzeVideo(selectedChildId, selectedFile, () => {
-        setStatusText('Video uploaded. Running pbr4RRB inference; CPU analysis may take several minutes...');
+        setStatusText('Video received. The AI model is analyzing the video. This may take about 1–2 minutes on CPU.');
       });
       showToast('AI4ASD behavior video analyzed successfully!', 'success');
       navigate('/parent/results', { state: { result } });
@@ -174,10 +174,10 @@ export const VideoUploadPage: React.FC = () => {
               className="w-full sm:w-auto px-8 py-3 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md shadow-purple-600/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isUploading ? (
-                <span>Uploading...</span>
+                <span>{statusText.startsWith('Video received') ? 'Analyzing behavior on CPU...' : 'Uploading video...'}</span>
               ) : (
                 <>
-                  <span>Upload Video</span>
+                  <span>Upload & Analyze</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
