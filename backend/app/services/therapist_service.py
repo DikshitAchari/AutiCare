@@ -76,54 +76,66 @@ class TherapistService:
     @staticmethod
     def ensure_demo_therapists(db: Session) -> None:
         """Seed demo clinical specialists if none exist yet. Clearly marked as DEMO."""
-        existing = db.query(User).filter(User.role == "THERAPIST").first()
-        if existing:
+        existing_profile = db.query(TherapistProfile).first()
+        if existing_profile:
             return
 
         for demo in DEMO_THERAPISTS:
-            user = User(
-                email=demo["email"],
-                password_hash=get_password_hash("demo-therapist-pwd-12345"),
-                name=demo["name"],
-                role="THERAPIST",
-                phone=demo["phone"],
-                status="APPROVED",
-                is_active=True,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            existing_user = db.query(User).filter(User.email == demo["email"]).first()
+            if existing_user:
+                user = existing_user
+            else:
+                user = User(
+                    email=demo["email"],
+                    password_hash=get_password_hash("demo-therapist-pwd-12345"),
+                    name=demo["name"],
+                    role="THERAPIST",
+                    phone=demo["phone"],
+                    status="APPROVED",
+                    is_active=True,
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
 
-            profile = TherapistProfile(
-                user_id=user.id,
-                title=demo["title"],
-                qualification=demo["qualification"],
-                experience_years=demo["experience_years"],
-                specializations=demo["specializations"],
-                languages=demo["languages"],
-                bio=demo["bio"],
-                rating=demo["rating"],
-                reviews_count=demo["reviews_count"],
-                hourly_rate=demo["hourly_rate"],
-                location=demo["location"],
-                documents_verified=True,
-                avatar_url=demo["avatar_url"],
+            profile = (
+                db.query(TherapistProfile)
+                .filter(TherapistProfile.user_id == user.id)
+                .first()
             )
-            db.add(profile)
-            db.commit()
+            if not profile:
+                profile = TherapistProfile(
+                    user_id=user.id,
+                    title=demo["title"],
+                    qualification=demo["qualification"],
+                    experience_years=demo["experience_years"],
+                    specializations=demo["specializations"],
+                    languages=demo["languages"],
+                    bio=demo["bio"],
+                    rating=demo["rating"],
+                    reviews_count=demo["reviews_count"],
+                    hourly_rate=demo["hourly_rate"],
+                    location=demo["location"],
+                    documents_verified=True,
+                    avatar_url=demo["avatar_url"],
+                )
+                db.add(profile)
+                db.commit()
 
-            # Add sample availability slots across weekdays
-            for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]:
-                for start_t, end_t in STANDARD_SLOTS:
-                    slot = TherapistAvailability(
-                        therapist_id=user.id,
-                        day_of_week=day,
-                        start_time=start_t,
-                        end_time=end_t,
-                        is_booked=False,
-                    )
-                    db.add(slot)
-            db.commit()
+            # Add sample availability slots across weekdays if none exist
+            existing_slots = db.query(TherapistAvailability).filter(TherapistAvailability.therapist_id == user.id).count()
+            if existing_slots == 0:
+                for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]:
+                    for start_t, end_t in STANDARD_SLOTS:
+                        slot = TherapistAvailability(
+                            therapist_id=user.id,
+                            day_of_week=day,
+                            start_time=start_t,
+                            end_time=end_t,
+                            is_booked=False,
+                        )
+                        db.add(slot)
+                db.commit()
 
     @staticmethod
     def list_therapists(
@@ -133,7 +145,10 @@ class TherapistService:
 
         query = db.query(User).filter(User.role == "THERAPIST")
         if status_filter:
-            query = query.filter(User.status == status_filter)
+            if status_filter == "APPROVED":
+                query = query.filter(User.status.in_(["APPROVED", "ACTIVE"]))
+            else:
+                query = query.filter(User.status == status_filter)
 
         users = query.all()
         results: List[TherapistProfileOut] = []
