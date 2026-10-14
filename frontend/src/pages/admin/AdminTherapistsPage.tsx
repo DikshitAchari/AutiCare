@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { therapistApi } from '../../services/mockApi/therapistApi';
+import { therapistApi } from '../../services/api/therapistApi';
 import type { TherapistUser } from '../../types/user';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/ui/Card';

@@ -46,5 +46,10 @@ export const assessmentApi = {
   },
 
   getAllResults: async (): Promise<AssessmentResult[]> =>
-    request<BackendAssessmentResult[]>('/api/assessment').then((results) => results.map(toResult))
+    request<BackendAssessmentResult[]>('/api/assessment').then((results) => results.map(toResult)),
+
+  getResultsByChild: async (childId: string): Promise<AssessmentResult[]> => {
+    const results = await assessmentApi.getAllResults();
+    return results.filter((r) => r.childId === childId);
+  }
 };

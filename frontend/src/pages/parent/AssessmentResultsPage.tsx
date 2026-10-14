@@ -60,10 +60,13 @@ export const AssessmentResultsPage: React.FC = () => {
     return toAssessmentResult(stateResult);
   });
   const [loading, setLoading] = useState(!stateResult);
-  const poseChannels =
-    ('poseAnalysis' in (activeResult ?? {}) && activeResult?.poseAnalysis?.channels)
-      ? Object.entries(activeResult.poseAnalysis.channels)
-      : [];
+  const poseAnalysisData =
+    activeResult && 'poseAnalysis' in activeResult
+      ? (activeResult as PredictionResult).poseAnalysis
+      : undefined;
+  const poseChannels = poseAnalysisData?.channels
+    ? Object.entries(poseAnalysisData.channels)
+    : [];
   const topPoseChannels = [...poseChannels]
     .filter(([, value]) => value && typeof value === 'object')
     .sort(([, left], [, right]) => {

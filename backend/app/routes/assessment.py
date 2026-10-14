@@ -85,8 +85,57 @@ def list_children(token_payload: dict = Depends(get_current_user_token), db: Ses
     ]
 
 
+@router.get("/children/{child_id}", response_model=ChildOut)
+def get_child(
+    child_id: int,
+    token_payload: dict = Depends(get_current_user_token),
+    db: Session = Depends(get_db),
+):
+    user_id = int(token_payload.get("sub"))
+    user_role = str(token_payload.get("role", "PARENT")).upper()
+
+    child = db.query(ChildProfile).filter(ChildProfile.id == child_id).first()
+    if not child:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Child profile not found")
+
+    if user_role == "PARENT" and child.parent_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized: You can only view your own child's profile.",
+        )
+
+    return ChildOut(
+        id=child.id,
+        parent_id=child.parent_id,
+        name=child.name,
+        dob=child.dob,
+        age=child.age,
+        gender=child.gender,
+        school=child.school,
+        grade=child.grade,
+        parent_notes=child.parent_notes,
+        support_indicator=child.support_indicator,
+        therapy_status=child.therapy_status,
+        assessment_status=child.assessment_status,
+        last_assessment_date=child.last_assessment_date,
+    )
+
+
 @router.post("/assessment", response_model=AssessmentResultOut, status_code=status.HTTP_201_CREATED)
 def submit_assessment(payload: AssessmentSubmit, token_payload: dict = Depends(get_current_user_token), db: Session = Depends(get_db)):
+    user_id = int(token_payload.get("sub"))
+    user_role = str(token_payload.get("role", "PARENT")).upper()
+
+    # Enforce ownership
+    child = db.query(ChildProfile).filter(ChildProfile.id == payload.child_id).first()
+    if not child:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Child profile not found")
+    if user_role == "PARENT" and child.parent_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized: You can only submit assessments for your own child.",
+        )
+
     try:
         record = AssessmentService.submit_assessment(db, payload.child_id, payload.answers)
     except ValueError as exc:
@@ -110,7 +159,18 @@ def submit_assessment(payload: AssessmentSubmit, token_payload: dict = Depends(g
 
 @router.get("/assessment", response_model=List[AssessmentResultOut])
 def list_assessments(token_payload: dict = Depends(get_current_user_token), db: Session = Depends(get_db)):
-    results = db.query(AssessmentRecord).all()
+    user_id = int(token_payload.get("sub"))
+    user_role = str(token_payload.get("role", "PARENT")).upper()
+
+    if user_role == "PARENT":
+        parent_children = db.query(ChildProfile.id).filter(ChildProfile.parent_id == user_id).all()
+        child_ids = [c.id for c in parent_children]
+        if not child_ids:
+            return []
+        results = db.query(AssessmentRecord).filter(AssessmentRecord.child_id.in_(child_ids)).all()
+    else:
+        results = db.query(AssessmentRecord).all()
+
     output = []
     for record in results:
         output.append(

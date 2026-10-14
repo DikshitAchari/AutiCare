@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { storageService } from '../../services/storage/storageService';
+import { adminApi } from '../../services/api/adminApi';
 import type { ParentUser } from '../../types/user';
 import { Card } from '../../components/ui/Card';
 
@@ -7,9 +7,7 @@ export const AdminParentsPage: React.FC = () => {
   const [parents, setParents] = useState<ParentUser[]>([]);
 
   useEffect(() => {
-    // Initial load from local storage is safe and intentionally uses a one-time sync hydration.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setParents(storageService.getParents());
+    adminApi.getParents().then(setParents).catch((err) => console.warn('Failed to load parents:', err));
   }, []);
 
   return (

@@ -50,7 +50,7 @@ export const AdminSystemPage: React.FC = () => {
           <ShieldCheck className="w-5 h-5 text-emerald-600" />
           <div>
             <h4 className="text-xs font-bold text-slate-900">Clinical Data Disclaimers & Compliance</h4>
-            <p className="text-[11px] text-slate-500">All data processed in this web application is maintained as mock client-side state.</p>
+            <p className="text-[11px] text-slate-500">All clinical screening data, appointments, and profiles are processed through the AutiCare backend API with strict role authorization and medical disclaimers.</p>
           </div>
         </div>
       </Card>

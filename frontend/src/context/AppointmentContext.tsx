@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Appointment, BookingSource, AppointmentType } from '../types/appointment';
-import { appointmentApi } from '../services/mockApi/appointmentApi';
+import { appointmentApi } from '../services/api/appointmentApi';
 import { storageService } from '../services/storage/storageService';
 
 interface AppointmentContextType {
@@ -30,24 +30,35 @@ interface AppointmentContextType {
 const AppointmentContext = createContext<AppointmentContextType | undefined>(undefined);
 
 export const AppointmentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [appointments, setAppointments] = useState<Appointment[]>(() => storageService.getAppointments());
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const refreshAppointments = useCallback(() => {
-    setAppointments(storageService.getAppointments());
+    const token = storageService.getAuthToken();
+    if (!token) return;
+    appointmentApi
+      .getAppointments()
+      .then((data) => setAppointments(data))
+      .catch((err) => console.warn('Failed to fetch appointments:', err));
   }, []);
 
-  const isSlotAvailable = useCallback((therapistId: string, date: string, time: string): boolean => {
-    const currentApts = storageService.getAppointments();
-    const match = currentApts.find(
-      (a) =>
-        a.therapistId === therapistId &&
-        a.date === date &&
-        a.time === time &&
-        a.status !== 'CANCELLED'
-    );
-    return !match;
-  }, []);
+  useEffect(() => {
+    refreshAppointments();
+  }, [refreshAppointments]);
+
+  const isSlotAvailable = useCallback(
+    (therapistId: string, date: string, time: string): boolean => {
+      const match = appointments.find(
+        (a) =>
+          a.therapistId === therapistId &&
+          a.date === date &&
+          a.time === time &&
+          a.status !== 'CANCELLED'
+      );
+      return !match;
+    },
+    [appointments]
+  );
 
   const bookAppointment = async (payload: {
     therapistId: string;

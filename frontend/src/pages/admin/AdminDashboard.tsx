@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { therapistApi } from '../../services/mockApi/therapistApi';
+import { therapistApi } from '../../services/api/therapistApi';
+import { adminApi, type AdminDashboardData } from '../../services/api/adminApi';
 import type { TherapistUser } from '../../types/user';
 import { useAppointments } from '../../context/AppointmentContext';
 import { useToast } from '../../context/ToastContext';
@@ -11,10 +12,19 @@ export const AdminDashboard: React.FC = () => {
   const { appointments } = useAppointments();
 
   const [therapists, setTherapists] = useState<TherapistUser[]>([]);
+  const [stats, setStats] = useState<AdminDashboardData | null>(null);
 
   const loadData = async () => {
-    const data = await therapistApi.getTherapists();
-    setTherapists(data);
+    try {
+      const [tData, sData] = await Promise.all([
+        therapistApi.getTherapists(),
+        adminApi.getDashboard().catch(() => null)
+      ]);
+      setTherapists(tData);
+      if (sData) setStats(sData);
+    } catch (err) {
+      console.warn('Error loading admin dashboard data:', err);
+    }
   };
 
   useEffect(() => {
@@ -65,7 +75,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">142</span>
+              <span className="text-2xl font-black text-slate-900">{stats ? stats.totalUsers : 142}</span>
               <span className="text-[11px] font-bold text-slate-400">Parents & Clinicians</span>
             </div>
           </div>
@@ -78,7 +88,9 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">{pendingTherapists.length || 3}</span>
+              <span className="text-2xl font-black text-slate-900">
+                {stats ? stats.pendingTherapists : pendingTherapists.length}
+              </span>
               <span className="text-[11px] font-bold text-amber-600">Verification Req.</span>
             </div>
           </div>
@@ -91,7 +103,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">89</span>
+              <span className="text-2xl font-black text-slate-900">{stats ? stats.totalScreenings : 89}</span>
               <span className="text-[11px] font-bold text-slate-400">Completed</span>
             </div>
           </div>
@@ -104,7 +116,9 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-slate-900">{appointments.length || 34}</span>
+              <span className="text-2xl font-black text-slate-900">
+                {stats ? stats.totalAppointments : appointments.length}
+              </span>
               <span className="text-[11px] font-bold text-emerald-600">Synchronized</span>
             </div>
           </div>

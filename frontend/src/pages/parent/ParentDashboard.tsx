@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { childApi } from '../../services/api/childApi';
-import { therapistApi } from '../../services/mockApi/therapistApi';
+import { therapistApi } from '../../services/api/therapistApi';
 import type { Child } from '../../types/child';
 import type { TherapistUser } from '../../types/user';
 import { useAppointments } from '../../context/AppointmentContext';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { behaviorApi } from '../../services/mockApi/behaviorApi';
+import { behaviorApi } from '../../services/api/behaviorApi';
 import { childApi } from '../../services/api/childApi';
 import type { BehaviorLog } from '../../types/behavior';
 import type { Child } from '../../types/child';

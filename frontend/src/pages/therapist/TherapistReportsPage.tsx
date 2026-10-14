@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { reportApi } from '../../services/mockApi/reportApi';
-import { childApi } from '../../services/mockApi/childApi';
+import { reportApi } from '../../services/api/reportApi';
+import { childApi } from '../../services/api/childApi';
 import type { ClinicalReport } from '../../types/report';
 import type { Child } from '../../types/child';
 import { CreateReportModal } from '../../components/reports/CreateReportModal';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { FileText, Plus, CheckCircle, Target, Award, Sparkles, Send } from 'lucide-react';
 
 export const TherapistReportsPage: React.FC = () => {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [reports, setReports] = useState<ClinicalReport[]>([]);
   const [childrenList, setChildrenList] = useState<Child[]>([]);
@@ -51,8 +53,8 @@ export const TherapistReportsPage: React.FC = () => {
       await reportApi.createReport({
         childId: selectedChild.id,
         childName: selectedChild.name,
-        therapistId: 'therapist-1',
-        therapistName: 'Dr. Anjali Sharma',
+        therapistId: user?.id || '1',
+        therapistName: user?.name || 'Clinical Specialist',
         date: new Date().toISOString().split('T')[0],
         title: `${behaviorType} Clinical Observation`,
         goalsAchieved: [`Demonstrated improved ${behaviorType.toLowerCase()}`],

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { reportApi } from '../../services/mockApi/reportApi';
+import { reportApi } from '../../services/api/reportApi';
 import type { ClinicalReport } from '../../types/report';
 import { Button } from '../../components/ui/Button';
 import { FileText, Download, TrendingUp, Users, Calendar, Award } from 'lucide-react';

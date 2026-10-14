@@ -4,10 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.database.connection import Base, engine
 from app.models import user  # noqa: F401
+from app.routes.admin import router as admin_router
+from app.routes.appointments import router as appointments_router
 from app.routes.assessment import router as assessment_router
 from app.routes.auth import router as auth_router
 from app.routes.chat import router as chat_router
+from app.routes.messages import router as messages_router
 from app.routes.prediction import router as prediction_router
+from app.routes.reports import router as reports_router
+from app.routes.therapists import router as therapists_router
 from app.routes.users import router as users_router
 
 settings = get_settings()
@@ -35,8 +40,14 @@ app.include_router(users_router)
 app.include_router(assessment_router)
 app.include_router(prediction_router)
 app.include_router(chat_router)
+app.include_router(therapists_router)
+app.include_router(appointments_router)
+app.include_router(reports_router)
+app.include_router(messages_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": settings.app_name}
+
